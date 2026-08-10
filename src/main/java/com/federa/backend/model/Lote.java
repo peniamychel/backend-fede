@@ -1,5 +1,6 @@
 package com.federa.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.federa.backend.model.enums.EstadoLote;
 import com.federa.backend.model.enums.ExtensionLote;
 import com.federa.backend.model.enums.Mercado;
@@ -10,9 +11,22 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Parcela asignada a un {@link Productor}. Mapea las columnas N° LOTE, EXT,
- * ESTADO DEL LOTE y MERCADO.
+ * Una parcela del padrón. Mapea las columnas N° LOTE, EXT, ESTADO DEL LOTE y
+ * MERCADO.
+ * <p>
+ * <b>El lote pertenece al sindicato, no al productor.</b> Es la diferencia que
+ * ordena todo lo demás: la tierra no se mueve. Un productor puede vender su
+ * lote e irse a otro sindicato, y el lote se queda donde siempre estuvo. Colgar
+ * el lote del productor hacía que la parcela lo siguiera, que es imposible.
+ * <p>
+ * Quién lo tiene se guarda como una sucesión de {@link TenenciaLote}: el
+ * tenedor de hoy es el período abierto, y los cerrados son el historial.
  * <p>
  * Decisiones tomadas a partir del dato real:
  * <ul>
@@ -33,7 +47,7 @@ import lombok.Setter;
 @Table(
         name = "lotes",
         indexes = {
-                @Index(name = "idx_lote_productor", columnList = "productor_id"),
+                @Index(name = "idx_lote_sindicato", columnList = "sindicato_id"),
                 @Index(name = "idx_lote_numero", columnList = "numero")
         }
 )
@@ -81,10 +95,84 @@ public class Lote extends EntidadAuditable {
     @Column(length = 20)
     private Mercado mercado;
 
+    /**
+     * Superficie en hectáreas, que es como se mide la tierra acá.
+     * <p>
+     * Cuatro decimales llegan al metro cuadrado. Null mientras no se haya
+     * medido: en el padrón original la superficie no está, y forzar un cero
+     * haría que una parcela sin medir se confunda con una de tamaño nulo.
+     */
+    @Column(precision = 10, scale = 4)
+    private BigDecimal superficie;
+
+    /**
+     * Dónde está la parcela, en grados decimales. Null mientras no se marque.
+     * <p>
+     * DECIMAL y no double, igual que en el sindicato: un double redondea, y
+     * sobre el terreno ese redondeo son metros. Con 7 decimales la precisión
+     * ronda el centímetro.
+     * <p>
+     * Es un punto y no un polígono. Alcanza para encontrar la parcela en el
+     * mapa, que es lo que hace falta hoy; dibujar el perímetro sería otra cosa
+     * y no cambiaría este campo, lo agregaría al lado.
+     */
+    @Column(precision = 10, scale = 7)
+    private BigDecimal latitud;
+
+    @Column(precision = 10, scale = 7)
+    private BigDecimal longitud;
+
+    /** Cuándo se marcó por última vez. Null si nunca se marcó. */
+    @Column(name = "ubicacion_actualizada_en")
+    private LocalDateTime ubicacionActualizadaEn;
+
+    /** Dónde está la tierra. No cambia. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "productor_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_lote_productor"))
-    private Productor productor;
+    @JoinColumn(name = "sindicato_id", nullable = false,
+            foreignKey = @ForeignKey(name = "fk_lote_sindicato"))
+    private Sindicato sindicato;
+
+    /**
+     * Quién lo tuvo y quién lo tiene, del más reciente al más antiguo.
+     * <p>
+     * En cascada porque el historial de tenencia no le sirve a nadie sin el
+     * lote: si la parcela se borra, sus períodos se van con ella.
+     */
+    @JsonIgnore
+    @OneToMany(mappedBy = "lote", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<TenenciaLote> tenencias = new ArrayList<>();
+
+    /** El sistema que tiene hoy, si tiene. */
+    @JsonIgnore
+    @OneToMany(mappedBy = "lote", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<TenenciaSistema> sistemas = new ArrayList<>();
+
+    @Transient
+    public boolean tieneUbicacion() {
+        return latitud != null && longitud != null;
+    }
+
+    /** Marca o mueve el punto de la parcela. */
+    public void marcarUbicacion(BigDecimal lat, BigDecimal lon) {
+        this.latitud = lat;
+        this.longitud = lon;
+        this.ubicacionActualizadaEn = LocalDateTime.now();
+    }
+
+    public void borrarUbicacion() {
+        this.latitud = null;
+        this.longitud = null;
+        this.ubicacionActualizadaEn = null;
+    }
+
+    /** Quién lo tiene hoy, o null si quedó sin tenedor. */
+    @Transient
+    public TenenciaLote getTenenciaVigente() {
+        return tenencias.stream()
+                .filter(TenenciaLote::estaVigente)
+                .findFirst()
+                .orElse(null);
+    }
 
     /** Identificación legible del lote: "66-A" o "66" si no tiene extensión. */
     @Transient

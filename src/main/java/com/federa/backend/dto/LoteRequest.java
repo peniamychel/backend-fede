@@ -1,6 +1,10 @@
 package com.federa.backend.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+
+import java.math.BigDecimal;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -43,9 +47,25 @@ public record LoteRequest(
         @Size(max = 20, message = "el mercado no puede superar los 20 caracteres")
         String mercado,
 
-        @Schema(description = "Productor al que se le asigna. Devuelve 404 si no existe.",
-                example = "812", requiredMode = Schema.RequiredMode.REQUIRED)
-        @NotNull(message = "el lote debe pertenecer a un productor")
+        @Schema(description = "Sindicato donde está la tierra. Devuelve 404 si no existe. "
+                + "No cambia: un lote no se muda de sindicato.",
+                example = "17", requiredMode = Schema.RequiredMode.REQUIRED)
+        @NotNull(message = "el lote pertenece a un sindicato")
+        Long sindicatoId,
+
+        @Schema(description = "Superficie en hectáreas. Se puede dejar vacía: en el padrón "
+                + "original no está, y un cero se confundiría con una parcela de tamaño nulo.",
+                example = "12.5")
+        @DecimalMin(value = "0.0", inclusive = false,
+                message = "la superficie tiene que ser mayor que cero")
+        @Digits(integer = 6, fraction = 4,
+                message = "la superficie admite hasta 4 decimales de hectárea")
+        BigDecimal superficie,
+
+        @Schema(description = "Quién lo tiene, si ya se sabe. Al crearlo abre su primer "
+                + "período de tenencia; al editarlo se ignora, porque cambiar de tenedor es "
+                + "un traspaso y va por su propio endpoint.",
+                example = "812")
         Long productorId
 ) {
 }

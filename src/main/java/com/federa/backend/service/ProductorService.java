@@ -6,12 +6,14 @@ import com.federa.backend.dto.ProductorDetalleResponse;
 import com.federa.backend.dto.ProductorRequest;
 import com.federa.backend.dto.ProductorResponse;
 import com.federa.backend.exception.RecursoNoEncontradoException;
+import com.federa.backend.exception.ReglaNegocioException;
 import com.federa.backend.model.Productor;
 import com.federa.backend.model.Sindicato;
 import com.federa.backend.model.enums.TipoImagen;
 import com.federa.backend.repository.ImagenCargoRepository;
 import com.federa.backend.repository.ImagenProductorRepository;
 import com.federa.backend.repository.ProductorRepository;
+import com.federa.backend.repository.TenenciaLoteRepository;
 import com.federa.backend.util.Paginas;
 import com.federa.backend.util.Textos;
 import org.springframework.data.domain.Page;
@@ -30,17 +32,20 @@ import java.util.Map;
 public class ProductorService {
 
     private final ProductorRepository productorRepository;
+    private final TenenciaLoteRepository tenenciaRepository;
     private final ImagenProductorRepository imagenRepository;
     private final ImagenCargoRepository imagenCargoRepository;
     private final SindicatoService sindicatoService;
     private final AlmacenObjetos almacen;
 
     public ProductorService(ProductorRepository productorRepository,
+                            TenenciaLoteRepository tenenciaRepository,
                             ImagenProductorRepository imagenRepository,
                             ImagenCargoRepository imagenCargoRepository,
                             SindicatoService sindicatoService,
                             AlmacenObjetos almacen) {
         this.productorRepository = productorRepository;
+        this.tenenciaRepository = tenenciaRepository;
         this.imagenRepository = imagenRepository;
         this.imagenCargoRepository = imagenCargoRepository;
         this.sindicatoService = sindicatoService;
@@ -99,7 +104,9 @@ public class ProductorService {
     }
 
     /**
-     * Borra el productor junto con sus lotes, observaciones e imágenes.
+     * Borra el productor con sus observaciones, imágenes y períodos de
+     * tenencia. <b>Sus lotes no</b>: la tierra pertenece al sindicato y se
+     * queda ahí, con o sin él.
      * <p>
      * Las filas se van por cascade, pero los archivos del almacén no: el disco
      * no sabe nada de JPA. Hay que leer sus claves antes de borrar y quitarlos
@@ -108,6 +115,19 @@ public class ProductorService {
     @Transactional
     public void eliminar(Long id) {
         Productor productor = buscar(id);
+
+        // Un productor con lotes a su nombre no se borra: la tierra no
+        // desaparece con él, y borrarlo dejaría parcelas sin dueño y sin
+        // constancia de quién las tenía. Primero se traspasan, y así el
+        // historial dice a quién pasaron.
+        long lotes = tenenciaRepository.countByProductorIdAndVigenteIsTrue(id);
+        if (lotes > 0) {
+            throw new ReglaNegocioException(String.format(
+                    "%s tiene %d lote(s) a su nombre. Traspasalos primero: si lo borrás ahora, "
+                    + "las parcelas quedan sin tenedor y sin registro de a quién pasaron. "
+                    + "Si se fue del sindicato, también podés deshabilitarlo en vez de borrarlo.",
+                    productor.getNombreCompleto(), lotes));
+        }
 
         // Sus fotos y, además, las firmas de los cargos que haya ocupado: dos
         // orígenes distintos de archivos que apuntan a la misma persona.

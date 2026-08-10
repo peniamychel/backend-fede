@@ -102,7 +102,7 @@ public class CredencialService {
         Sindicato sindicato = productor.getSindicato();
 
         Directorio directorio = directorioDe(sindicato.getId());
-        String lotes = unir(loteRepository.findByProductorId(productorId).stream()
+        String lotes = unir(loteRepository.findVigentesDeProductor(productorId).stream()
                 .map(Lote::getCodigo)
                 .filter(codigo -> codigo != null)
                 .toList());

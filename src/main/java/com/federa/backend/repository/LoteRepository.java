@@ -10,19 +10,32 @@ import java.util.List;
 
 public interface LoteRepository extends JpaRepository<Lote, Long> {
 
-    List<Lote> findByProductorId(Long productorId);
+    /**
+     * Los lotes de un sindicato.
+     * <p>
+     * Antes esto navegaba {@code l.productor.sindicato.id}, y era una respuesta
+     * indirecta a la pregunta equivocada: preguntaba dónde está el productor
+     * para deducir dónde está la tierra. Ahora el lote sabe su sindicato.
+     */
+    List<Lote> findBySindicatoIdOrderByNumeroAscExtensionAsc(Long sindicatoId);
 
-    List<Lote> findByProductorSindicatoId(Long sindicatoId);
+    /** Los que tiene hoy un productor, por su período de tenencia abierto. */
+    @Query("""
+            select t.lote from TenenciaLote t
+            where t.productor.id = :productorId and t.vigente = true
+            order by t.lote.numero, t.lote.extension
+            """)
+    List<Lote> findVigentesDeProductor(@Param("productorId") Long productorId);
 
     long countByEstadoLote(EstadoLote estadoLote);
 
     /**
-     * Números de lote repetidos dentro de un mismo sindicato: el hallazgo más
-     * frecuente de la revisión del padrón (425 casos).
+     * Números que se repiten dentro del sindicato: el hallazgo más frecuente de
+     * la revisión del padrón, 425 casos.
      */
     @Query("""
             select l.numero from Lote l
-            where l.productor.sindicato.id = :sindicatoId
+            where l.sindicato.id = :sindicatoId
               and l.numero is not null
             group by l.numero, l.extension
             having count(l) > 1
@@ -30,21 +43,39 @@ public interface LoteRepository extends JpaRepository<Lote, Long> {
     List<String> findNumerosDuplicadosEnSindicato(@Param("sindicatoId") Long sindicatoId);
 
     /**
-     * Lotes de un sindicato como {productorId, número, extensión}, para armar
-     * la columna N° LOTE del informe.
+     * Para el informe: qué lotes tiene hoy cada productor del sindicato, en una
+     * sola consulta.
      * <p>
-     * Es una proyección y no una lista de entidades porque el informe recorre
-     * cientos de productores: traer los lotes uno por uno sería una consulta
-     * por fila.
+     * Devuelve (productorId, numero, extension). Va por la tenencia vigente
+     * porque es la que dice de quién es el lote hoy, que es lo que se imprime.
      */
     @Query("""
-            select l.productor.id, l.numero, l.extension from Lote l
-            where l.productor.sindicato.id = :sindicatoId
-            order by l.numero, l.extension
+            select t.productor.id, l.numero, l.extension
+              from TenenciaLote t join t.lote l
+             where l.sindicato.id = :sindicatoId and t.vigente = true
+             order by l.numero, l.extension
             """)
     List<Object[]> findIdentificacionesPorSindicato(@Param("sindicatoId") Long sindicatoId);
 
-    /** Lotes cuyo estado del padrón no encajó en ninguna categoría conocida. */
     @Query("select l from Lote l where l.estadoLote = com.federa.backend.model.enums.EstadoLote.DESCONOCIDO")
     List<Lote> findConEstadoDesconocido();
+
+    /** Los que ya tienen punto marcado, para dibujarlos todos en un mapa. */
+    @Query("""
+            select l from Lote l
+            where l.sindicato.id = :sindicatoId
+              and l.latitud is not null and l.longitud is not null
+            order by l.numero, l.extension
+            """)
+    List<Lote> findConUbicacion(@Param("sindicatoId") Long sindicatoId);
+
+    /** Lotes del sindicato que hoy no tiene nadie. */
+    @Query("""
+            select l from Lote l
+            where l.sindicato.id = :sindicatoId
+              and not exists (select 1 from TenenciaLote t
+                               where t.lote = l and t.vigente = true)
+            order by l.numero, l.extension
+            """)
+    List<Lote> findSinTenedor(@Param("sindicatoId") Long sindicatoId);
 }

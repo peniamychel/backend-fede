@@ -1,6 +1,7 @@
 package com.federa.backend.dto;
 
 import com.federa.backend.model.Productor;
+import com.federa.backend.model.TenenciaLote;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -27,7 +28,13 @@ public record ProductorDetalleResponse(
     public static ProductorDetalleResponse desde(Productor p) {
         return new ProductorDetalleResponse(
                 ProductorResponse.desde(p),
-                p.getLotes().stream().map(LoteResponse::desde).toList(),
+                // Los lotes que tiene hoy, no los que tuvo alguna vez: el que
+                // vendió ya no es suyo. El historial completo está en
+                // /productores/{id}/lotes/historial.
+                p.getTenencias().stream()
+                        .filter(TenenciaLote::estaVigente)
+                        .map(t -> LoteResponse.desde(t.getLote(), t, null))
+                        .toList(),
                 p.getObservaciones().stream().map(ObservacionResponse::desde).toList(),
                 // El contenido de cada imagen es LAZY, así que armar esta lista
                 // trae la metadata sin arrastrar los binarios.

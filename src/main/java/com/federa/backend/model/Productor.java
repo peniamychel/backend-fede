@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -119,10 +120,21 @@ public class Productor extends EntidadAuditable {
             foreignKey = @ForeignKey(name = "fk_productor_sindicato"))
     private Sindicato sindicato;
 
+    /**
+     * Los períodos en que tuvo lotes, presentes y pasados.
+     * <p>
+     * Antes acá había una lista de lotes en cascada, y eso era un error de
+     * fondo: borrar a un productor borraba su tierra. El lote pertenece al
+     * sindicato y sobrevive a cualquier cambio de dueño; lo que se guarda del
+     * lado del productor es cuándo lo tuvo.
+     * <p>
+     * En cascada solo las tenencias: si el productor desaparece del padrón, sus
+     * períodos se van con él, pero los lotes se quedan donde están.
+     */
     @JsonIgnore
     @Builder.Default
     @OneToMany(mappedBy = "productor", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Lote> lotes = new ArrayList<>();
+    private List<TenenciaLote> tenencias = new ArrayList<>();
 
     @JsonIgnore
     @Builder.Default
@@ -164,7 +176,6 @@ public class Productor extends EntidadAuditable {
         return a != null ? n + " " + a : n;
     }
 
-    @Transient
     /**
      * Le da un código si todavía no tiene.
      * <p>
@@ -186,9 +197,21 @@ public class Productor extends EntidadAuditable {
         return fotoDescripcion != null && !fotoDescripcion.isBlank();
     }
 
-    public void agregarLote(Lote lote) {
-        lotes.add(lote);
-        lote.setProductor(this);
+    /**
+     * Le da un lote desde una fecha, abriendo su período de tenencia.
+     * <p>
+     * No comprueba que el lote esté libre: eso es trabajo del servicio, que
+     * sabe cerrar el período anterior. Acá solo se arma la relación en los dos
+     * sentidos.
+     */
+    public TenenciaLote tomarLote(Lote lote, LocalDate desde) {
+        TenenciaLote tenencia = new TenenciaLote();
+        tenencia.setLote(lote);
+        tenencia.setProductor(this);
+        tenencia.iniciar(desde);
+        tenencias.add(tenencia);
+        lote.getTenencias().add(tenencia);
+        return tenencia;
     }
 
     public void agregarObservacion(Observacion observacion) {

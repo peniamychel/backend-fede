@@ -10,6 +10,7 @@ import com.federa.backend.model.Observacion;
 import com.federa.backend.model.Productor;
 import com.federa.backend.model.Sindicato;
 import com.federa.backend.repository.CentralRepository;
+import com.federa.backend.repository.LoteRepository;
 import com.federa.backend.repository.ProductorRepository;
 import com.federa.backend.repository.SindicatoRepository;
 import com.federa.backend.util.Textos;
@@ -18,6 +19,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.InputStream;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -51,6 +53,7 @@ public class ImportacionService {
     private final CentralRepository centralRepository;
     private final SindicatoRepository sindicatoRepository;
     private final ProductorRepository productorRepository;
+    private final LoteRepository loteRepository;
     private final TransactionTemplate transacciones;
 
     public ImportacionService(LectorPlanilla lector,
@@ -58,12 +61,14 @@ public class ImportacionService {
                               CentralRepository centralRepository,
                               SindicatoRepository sindicatoRepository,
                               ProductorRepository productorRepository,
+                              LoteRepository loteRepository,
                               PlatformTransactionManager gestorTransacciones) {
         this.lector = lector;
         this.federacionService = federacionService;
         this.centralRepository = centralRepository;
         this.sindicatoRepository = sindicatoRepository;
         this.productorRepository = productorRepository;
+        this.loteRepository = loteRepository;
         this.transacciones = new TransactionTemplate(gestorTransacciones);
     }
 
@@ -124,6 +129,12 @@ public class ImportacionService {
         private final Map<String, SindicatoNuevo> sindicatosNuevos = new LinkedHashMap<>();
         private final List<ErrorFila> errores = new ArrayList<>();
         private final List<Productor> aGuardar = new ArrayList<>();
+
+        /**
+         * Los lotes de esta tanda. Van aparte porque hay que insertarlos antes
+         * que las tenencias que los apuntan.
+         */
+        private final List<Lote> nuevosLotes = new ArrayList<>();
 
         private int erroresTotales;
         private int filasLeidas;
@@ -243,9 +254,16 @@ public class ImportacionService {
             productor.setSindicato(sindicato);
 
             if (numeroLote != null) {
+                // El lote se da de alta en el sindicato —ahí está la tierra— y
+                // el productor de la planilla queda como su primer tenedor. La
+                // fecha de inicio es hoy: la planilla no dice desde cuándo lo
+                // tiene, y inventarla sería peor que dejar constancia de que el
+                // período empieza cuando se cargó.
                 Lote lote = new Lote();
                 lote.setNumero(numeroLote);
-                productor.agregarLote(lote);
+                lote.setSindicato(sindicato);
+                nuevosLotes.add(lote);
+                productor.tomarLote(lote, LocalDate.now());
                 lotes++;
             }
 
@@ -287,6 +305,10 @@ public class ImportacionService {
         }
 
         private void guardar() {
+            // Los lotes primero: la tenencia los referencia, y una referencia a
+            // una fila que todavía no existe no se puede insertar. El productor
+            // arrastra sus tenencias por cascada, así que con este orden alcanza.
+            loteRepository.saveAll(nuevosLotes);
             productorRepository.saveAll(aGuardar);
             // Fuerza los INSERT ahora: si alguna restricción de la base se
             // rompe, que falle acá dentro de la transacción y no al confirmar,
