@@ -183,7 +183,12 @@ public class DirectorioService {
             }
             // Se cierra el día anterior para que los períodos no se pisen: dos
             // presidentes el mismo día no es algo que quiera leer nadie después.
-            actual.terminar(desde.minusDays(1));
+            //
+            // Salvo que el relevo sea el mismo día en que asumió, que pasa al
+            // corregir una asignación equivocada: ahí el día anterior caería
+            // antes de su propio inicio y el período quedaría terminando antes
+            // de empezar.
+            actual.terminar(LoteService.cierreDe(actual.getDesde(), desde));
             // Hay que vaciar la marca de vigencia antes de insertar el nuevo, o
             // la clave única de la base rechaza el segundo.
             cargoRepository.saveAndFlush(actual);
