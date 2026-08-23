@@ -30,8 +30,7 @@ import java.util.List;
 @RequestMapping(ApiRutas.V1)
 @Tag(name = "Directorio", description =
         "Quién dirige cada sindicato, cada central y la federación. Cada nivel tiene sus "
-        + "cargos: el sindicato presidente y secretario; la central suma haciendas; la "
-        + "federación suma además vocal. Solo puede haber uno de cada cargo a la vez y nadie "
+        + "cargos y orden propios. Solo puede haber uno de cada cargo a la vez y nadie "
         + "puede ocupar dos cargos simultáneos, en ningún nivel.")
 public class DirectorioController {
 
@@ -67,7 +66,8 @@ public class DirectorioController {
     @Operation(summary = "Asigna un cargo del sindicato", description = DESCRIPCION_ASIGNAR)
     public DirectorioResponse asignarEnSindicato(
             @PathVariable Long id,
-            @Parameter(description = "PRESIDENTE o SECRETARIO.", example = "presidente")
+            @Parameter(description = "SECRETARIO_GENERAL, SECRETARIO_RELACIONES, HACIENDAS o VOCAL.",
+                    example = "SECRETARIO_GENERAL")
             @PathVariable TipoCargo cargo,
             @Valid @RequestBody AsignarCargoRequest peticion) {
         return directorioService.asignar(Ambito.SINDICATO, id, cargo, peticion);
@@ -88,7 +88,7 @@ public class DirectorioController {
 
     @GetMapping("/centrales/{id}/directorio")
     @Operation(summary = "Directorio en funciones de la central",
-            description = "Presidente, secretario y haciendas.")
+            description = "Secretario General, Secretario Relaciones, Haciendas y Vocal.")
     public DirectorioResponse deCentral(@PathVariable Long id) {
         return directorioService.obtener(Ambito.CENTRAL, id);
     }
@@ -110,7 +110,8 @@ public class DirectorioController {
     @Operation(summary = "Asigna un cargo de la central", description = DESCRIPCION_ASIGNAR)
     public DirectorioResponse asignarEnCentral(
             @PathVariable Long id,
-            @Parameter(description = "PRESIDENTE, SECRETARIO o HACIENDAS.", example = "haciendas")
+            @Parameter(description = "SECRETARIO_GENERAL, SECRETARIO_RELACIONES, HACIENDAS o VOCAL.",
+                    example = "haciendas")
             @PathVariable TipoCargo cargo,
             @Valid @RequestBody AsignarCargoRequest peticion) {
         return directorioService.asignar(Ambito.CENTRAL, id, cargo, peticion);
@@ -131,7 +132,7 @@ public class DirectorioController {
 
     @GetMapping("/federaciones/{id}/directorio")
     @Operation(summary = "Directorio en funciones de la federación",
-            description = "Presidente, secretario, haciendas y vocal.")
+            description = "Ejecutivo, Secretario General, Secretario Relaciones, Haciendas y Vocal.")
     public DirectorioResponse deFederacion(@PathVariable Long id) {
         return directorioService.obtener(Ambito.FEDERACION, id);
     }
@@ -153,7 +154,7 @@ public class DirectorioController {
     @Operation(summary = "Asigna un cargo de la federación", description = DESCRIPCION_ASIGNAR)
     public DirectorioResponse asignarEnFederacion(
             @PathVariable Long id,
-            @Parameter(description = "PRESIDENTE, SECRETARIO, HACIENDAS o VOCAL.",
+            @Parameter(description = "EJECUTIVO, SECRETARIO_GENERAL, SECRETARIO_RELACIONES, HACIENDAS o VOCAL.",
                     example = "vocal")
             @PathVariable TipoCargo cargo,
             @Valid @RequestBody AsignarCargoRequest peticion) {

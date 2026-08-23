@@ -39,6 +39,13 @@ public class ProcesadorImagenes {
     private static final String FORMATO = "jpg";
     private static final String MIME = "image/jpeg";
 
+    /** PNG conserva el canal alfa de las fotos a las que se les quitó el fondo. */
+    private static final String FORMATO_PNG = "png";
+    private static final String MIME_PNG = "image/png";
+
+    /** No se baja de este lado: una credencial no gana nada con menos detalle. */
+    private static final int LADO_MINIMO_PNG = 128;
+
     /** Veces que se reintenta achicando las dimensiones si la calidad no alcanzó. */
     private static final int INTENTOS_REDUCIENDO = 4;
 
@@ -101,6 +108,39 @@ public class ProcesadorImagenes {
     }
 
     /**
+     * Genera PNG manteniendo transparencia.
+     * <p>
+     * Es específico de la foto del productor: las firmas siguen en JPEG porque
+     * sus servicios generan claves .jpg y no necesitan canal alfa. Como PNG no
+     * tiene un control de calidad con pérdida, se reduce el lado de forma
+     * gradual hasta cumplir el tope de peso.
+     */
+    public Variante generarPng(BufferedImage origen, TipoImagen tipo) {
+        return generarPng(origen, tipo.getLadoMaximo(), tipo.getPesoObjetivo());
+    }
+
+    /**
+     * Genera un PNG de dimensiones libres manteniendo el canal alfa.
+     * Sirve también para firmas y sellos preparados sin fondo en el cliente.
+     */
+    public Variante generarPng(BufferedImage origen, int ladoMaximo, int pesoObjetivo) {
+        int lado = Math.min(ladoMaximo, Math.max(origen.getWidth(), origen.getHeight()));
+
+        while (true) {
+            byte[] bytes = comprimirPng(origen, lado);
+            if (bytes.length <= pesoObjetivo) {
+                return describir(bytes, MIME_PNG);
+            }
+            if (lado <= LADO_MINIMO_PNG) {
+                throw new ArchivoInvalidoException(String.format(
+                        "La imagen PNG no pudo reducirse a %d KB sin perder demasiada calidad.",
+                        pesoObjetivo / 1024));
+            }
+            lado = Math.max(LADO_MINIMO_PNG, (int) (lado * 0.8));
+        }
+    }
+
+    /**
      * Reduce la imagen hasta que entre en el lado y el peso pedidos.
      * <p>
      * Primero se acota el lado mayor, que es lo que más baja el peso, y después
@@ -123,7 +163,7 @@ public class ProcesadorImagenes {
                 byte[] bytes = comprimir(plana, lado, calidad);
                 ultimo = bytes;
                 if (bytes.length <= pesoObjetivo) {
-                    return describir(bytes);
+                    return describir(bytes, MIME);
                 }
             }
             // Ninguna calidad alcanzó: la imagen tiene demasiado detalle para
@@ -135,7 +175,7 @@ public class ProcesadorImagenes {
         }
         // Devolver la mejor aproximación es preferible a fallar: una foto un
         // poco más pesada de lo previsto sigue sirviendo, y el caso es raro.
-        return describir(ultimo);
+        return describir(ultimo, MIME);
     }
 
     private byte[] comprimir(BufferedImage imagen, int ladoMayor, float calidad) {
@@ -154,10 +194,24 @@ public class ProcesadorImagenes {
         }
     }
 
-    private Variante describir(byte[] bytes) {
+    private byte[] comprimirPng(BufferedImage imagen, int ladoMayor) {
+        try (ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
+            Thumbnails.of(imagen)
+                    .size(ladoMayor, ladoMayor)
+                    .keepAspectRatio(true)
+                    .outputFormat(FORMATO_PNG)
+                    .toOutputStream(salida);
+            return salida.toByteArray();
+        } catch (IOException e) {
+            throw new ArchivoInvalidoException(
+                    "No se pudo procesar la transparencia de la imagen: " + e.getMessage(), e);
+        }
+    }
+
+    private Variante describir(byte[] bytes, String tipoMime) {
         try {
             BufferedImage resultado = ImageIO.read(new ByteArrayInputStream(bytes));
-            return new Variante(bytes, resultado.getWidth(), resultado.getHeight(), MIME);
+            return new Variante(bytes, resultado.getWidth(), resultado.getHeight(), tipoMime);
         } catch (IOException e) {
             throw new ArchivoInvalidoException("No se pudo releer la imagen generada.", e);
         }

@@ -22,7 +22,7 @@ public class OpenApiConfig {
                         .version("v1")
                         .description("""
                                 Gestión del padrón de productores de la federación: centrales,
-                                sindicatos, productores, lotes y observaciones.
+                                sindicatos, productores, lotes y credenciales.
 
                                 **Sobre los datos.** El padrón viene de una planilla con 4.051
                                 filas y muchas inconsistencias, y la API está pensada para

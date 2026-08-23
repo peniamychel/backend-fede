@@ -32,8 +32,24 @@ build/
 ### VS Code ###
 .vscode/
 
+### Configuracion local y secretos ###
+# Se carga automaticamente al iniciar Spring desde la raiz del backend.
+.env
+.env.local
+.env.*.local
+!.env.example
+
 ### Almacen de objetos ###
 # Fotos de los productores. No van al repositorio: son datos, no codigo, y en
 # produccion esta carpeta deberia vivir fuera del directorio de la aplicacion
 # (ver federa.almacenamiento.raiz en application.properties).
 almacenamiento/
+
+### Copias de seguridad ###
+# Contienen todos los datos personales del padrón y nunca deben entrar a Git.
+respaldos/
+
+### Artefactos locales de ejecucion y verificacion ###
+.runtime/
+output/
+tmp/

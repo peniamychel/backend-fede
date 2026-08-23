@@ -18,6 +18,7 @@ import com.federa.backend.model.enums.TipoImagenCargo;
 import com.federa.backend.repository.CargoRepository;
 import com.federa.backend.repository.ImagenCargoRepository;
 import com.federa.backend.repository.ProductorRepository;
+import com.federa.backend.repository.VetoRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,6 +59,7 @@ public class DirectorioService {
     private final CentralService centralService;
     private final FederacionService federacionService;
     private final ProductorService productorService;
+    private final VetoRepository vetoRepository;
 
     public DirectorioService(CargoRepository cargoRepository,
                              ImagenCargoRepository imagenRepository,
@@ -66,7 +68,8 @@ public class DirectorioService {
                              SindicatoService sindicatoService,
                              CentralService centralService,
                              FederacionService federacionService,
-                             ProductorService productorService) {
+                             ProductorService productorService,
+                             VetoRepository vetoRepository) {
         this.cargoRepository = cargoRepository;
         this.imagenRepository = imagenRepository;
         this.productorRepository = productorRepository;
@@ -75,6 +78,7 @@ public class DirectorioService {
         this.centralService = centralService;
         this.federacionService = federacionService;
         this.productorService = productorService;
+        this.vetoRepository = vetoRepository;
     }
 
     // ------------------------------------------------------------ consulta
@@ -88,7 +92,7 @@ public class DirectorioService {
                 .map(tipo -> new DirectorioResponse.Puesto(
                         tipo,
                         tipo.getEtiqueta(),
-                        tipo.puedeFirmar(),
+                        ambito.puedeFirmar(tipo),
                         vigentes.stream()
                                 .filter(c -> c.getCargo() == tipo)
                                 .findFirst()
@@ -96,7 +100,7 @@ public class DirectorioService {
                                 .orElse(null)))
                 .toList();
 
-        return new DirectorioResponse(ambito, id, nombre, puestos);
+        return new DirectorioResponse(ambito, id, nombre, selloUrlDe(ambito, id), puestos);
     }
 
     public List<CargoResponse> historial(Ambito ambito, Long id) {
@@ -142,9 +146,18 @@ public class DirectorioService {
         Set<Long> ocupados = new HashSet<>(cargoRepository.findProductoresConCargo(
                 delNivel.stream().map(Productor::getId).toList()));
 
+        // Los observados por la asamblea tampoco: ofrecerlos sería invitar a
+        // elegir a alguien que el servidor va a rechazar, y peor todavía, a
+        // discutirlo en la reunión antes de descubrirlo.
+        Set<Long> vetados = new HashSet<>(
+                vetoRepository.buscar(null, null, true).stream()
+                        .map(v -> v.getProductor().getId())
+                        .toList());
+
         return delNivel.stream()
                 .filter(Productor::isEstado)
                 .filter(p -> !ocupados.contains(p.getId()))
+                .filter(p -> !vetados.contains(p.getId()))
                 .map(p -> ProductorResponse.desde(p, Map.of()))
                 .toList();
     }
@@ -171,6 +184,7 @@ public class DirectorioService {
         LocalDate desde = peticion.desdeOHoy();
 
         verificarPertenencia(ambito, id, nombre, productor);
+        verificarSinVeto(productor);
         verificarSinOtroCargo(productor, ambito, cargo, id);
 
         Cargo actual = vigenteDe(ambito, id, cargo).orElse(null);
@@ -197,11 +211,30 @@ public class DirectorioService {
         Cargo nuevo = new Cargo();
         nuevo.setCargo(cargo);
         nuevo.setProductor(productor);
+        nuevo.setPieFirma(productor.getNombreCompleto() + "\n"
+                + cargo.getEtiqueta().toUpperCase());
         colgar(nuevo, ambito, id);
         nuevo.iniciar(desde);
         cargoRepository.save(nuevo);
 
         return obtener(ambito, id);
+    }
+
+    /** Cambia el texto que se imprime debajo de la firma del período. */
+    @Transactional
+    public CargoResponse actualizarPieFirma(Long cargoId, String valor) {
+        Cargo cargo = cargoRepository.findById(cargoId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("cargo", cargoId));
+        if (!cargo.getAmbito().puedeFirmar(cargo.getCargo())) {
+            throw new ReglaNegocioException("El cargo de "
+                    + cargo.getCargo().getEtiqueta().toLowerCase()
+                    + " no lleva firma.");
+        }
+        String pie = valor == null ? null
+                : valor.replace("\r\n", "\n").replace('\r', '\n').strip();
+        cargo.setPieFirma(pie == null || pie.isBlank() ? null : pie);
+        cargoRepository.flush();
+        return CargoResponse.desde(cargo);
     }
 
     /**
@@ -233,6 +266,25 @@ public class DirectorioService {
     }
 
     // ---------------------------------------------------------- las reglas
+
+    /**
+     * Quien está observado por la asamblea no dirige nada.
+     * <p>
+     * Un veto no es una anotación administrativa: es la organización diciendo
+     * que esa persona está suspendida de sus derechos mientras dure. Ponerla al
+     * frente de un sindicato en ese estado sería la organización contradiciendo
+     * su propia decisión.
+     */
+    private void verificarSinVeto(Productor productor) {
+        vetoRepository.findByProductorIdAndVigenteIsTrue(productor.getId())
+                .ifPresent(veto -> {
+                    throw new ReglaNegocioException(String.format(
+                            "%s está observado por la asamblea desde el %s (%s). Mientras el "
+                            + "veto siga, no puede ocupar un cargo: primero hay que levantarlo, "
+                            + "en una reunión con su acta.",
+                            productor.getNombreCompleto(), veto.getDesde(), veto.getMotivo()));
+                });
+    }
 
     /** El candidato tiene que pertenecer al nivel que va a dirigir. */
     private void verificarPertenencia(Ambito ambito, Long id, String nombre,
@@ -298,6 +350,15 @@ public class DirectorioService {
             case CENTRAL -> centralService.buscar(id).getNombre();
             case FEDERACION -> federacionService.buscar(id).getNombre();
         };
+    }
+
+    private String selloUrlDe(Ambito ambito, Long id) {
+        String clave = switch (ambito) {
+            case SINDICATO -> sindicatoService.buscar(id).getSelloClave();
+            case CENTRAL -> centralService.buscar(id).getSelloClave();
+            case FEDERACION -> federacionService.buscar(id).getSelloClave();
+        };
+        return clave == null ? null : almacen.urlPublica(clave);
     }
 
     private List<Cargo> vigentesDe(Ambito ambito, Long id) {

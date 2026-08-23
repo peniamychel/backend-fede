@@ -12,9 +12,9 @@ import com.federa.backend.model.enums.TipoCargo;
 import com.federa.backend.model.enums.TipoImagenCargo;
 import com.federa.backend.repository.CargoRepository;
 import com.federa.backend.repository.LoteRepository;
-import com.federa.backend.repository.ObservacionRepository;
 import com.federa.backend.repository.ProductorRepository;
 import com.federa.backend.repository.SindicatoRepository;
+import com.federa.backend.util.CodigoPadron;
 import com.federa.backend.util.Textos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,8 +36,8 @@ import java.util.Optional;
  * <p>
  * La parte cara es juntar los datos sin caer en el problema de siempre: un
  * sindicato puede tener cientos de productores, y pedirle a cada uno sus lotes
- * y sus observaciones serían cientos de consultas. Acá son cuatro en total,
- * pase lo que pase: productores, lotes, observaciones y el presidente.
+ * serían cientos de consultas. Acá son tres en total, pase lo que pase:
+ * productores, lotes y el secretario general.
  */
 @Service
 @Transactional(readOnly = true)
@@ -51,7 +51,6 @@ public class InformeSindicatoService {
     private final SindicatoRepository sindicatoRepository;
     private final ProductorRepository productorRepository;
     private final LoteRepository loteRepository;
-    private final ObservacionRepository observacionRepository;
     private final CargoRepository cargoRepository;
     private final AlmacenObjetos almacen;
     private final InformeSindicatoPdf generador;
@@ -59,14 +58,12 @@ public class InformeSindicatoService {
     public InformeSindicatoService(SindicatoRepository sindicatoRepository,
                                    ProductorRepository productorRepository,
                                    LoteRepository loteRepository,
-                                   ObservacionRepository observacionRepository,
                                    CargoRepository cargoRepository,
                                    AlmacenObjetos almacen,
                                    InformeSindicatoPdf generador) {
         this.sindicatoRepository = sindicatoRepository;
         this.productorRepository = productorRepository;
         this.loteRepository = loteRepository;
-        this.observacionRepository = observacionRepository;
         this.cargoRepository = cargoRepository;
         this.almacen = almacen;
         this.generador = generador;
@@ -97,10 +94,6 @@ public class InformeSindicatoService {
     private List<InformeSindicato.Fila> filas(Long sindicatoId) {
         Map<Long, List<String>> lotes = agrupar(
                 loteRepository.findIdentificacionesPorSindicato(sindicatoId), this::codigoDeLote);
-        Map<Long, List<String>> observaciones = agrupar(
-                observacionRepository.findPendientesPorSindicato(sindicatoId),
-                fila -> (String) fila[1]);
-
         List<Productor> productores = new ArrayList<>(
                 productorRepository.findBySindicatoId(sindicatoId));
         productores.sort(Comparator
@@ -116,8 +109,7 @@ public class InformeSindicatoService {
                     apellidosDe(productor),
                     texto(productor.getCi()),
                     unir(lotes.get(productor.getId())),
-                    texto(productor.getCarnetProductor()),
-                    unir(observaciones.get(productor.getId()))));
+                    texto(CodigoPadron.de(productor))));
         }
         return filas;
     }
@@ -151,15 +143,16 @@ public class InformeSindicatoService {
     // ------------------------------------------------------------ dirigente
 
     /**
-     * Presidente vigente con sus imágenes, para el pie del acta.
+     * Secretario General vigente con su firma, para el pie del acta.
      * <p>
-     * Si no hay presidente, o si el archivo de la firma no está donde dice la
+     * Si no hay dirigente, o si el archivo de la firma no está donde dice la
      * base, se devuelve lo que se pueda: el acta se imprime igual con el
      * espacio en blanco.
      */
     private InformeSindicato.Dirigente dirigente(Long sindicatoId) {
         Optional<Cargo> presidencia = cargoRepository
-                .findBySindicatoIdAndCargoAndVigenteIsTrue(sindicatoId, TipoCargo.PRESIDENTE);
+                .findBySindicatoIdAndCargoAndVigenteIsTrue(
+                        sindicatoId, TipoCargo.SECRETARIO_GENERAL);
         if (presidencia.isEmpty()) {
             return null;
         }
@@ -167,7 +160,7 @@ public class InformeSindicatoService {
         return new InformeSindicato.Dirigente(
                 cargo.getProductor().getNombreCompleto(),
                 bytesDe(cargo, TipoImagenCargo.FIRMA),
-                bytesDe(cargo, TipoImagenCargo.PIE_FIRMA));
+                cargo.construirPieFirma());
     }
 
     private byte[] bytesDe(Cargo cargo, TipoImagenCargo tipo) {

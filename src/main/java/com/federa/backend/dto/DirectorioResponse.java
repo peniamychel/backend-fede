@@ -26,6 +26,10 @@ public record DirectorioResponse(
         @Schema(description = "Su nombre.", example = "1RO DE MAYO")
         String ambitoNombre,
 
+        @Schema(description = "URL del sello del sindicato, central o federación. "
+                + "Null si todavía no se cargó.")
+        String selloUrl,
+
         @Schema(description = "Un puesto por cargo del nivel, en orden.")
         List<Puesto> puestos
 ) {
@@ -35,7 +39,7 @@ public record DirectorioResponse(
      *
      * @param actual      período vigente, o null si el puesto está vacante.
      * @param puedeFirmar si a este cargo se le pueden cargar firma y pie de
-     *                    firma. Solo presidente y secretario: al resto la
+     *                    firma. Son los dos primeros cargos de cada nivel: al resto la
      *                    pantalla ni siquiera le ofrece subirlas.
      */
     public record Puesto(

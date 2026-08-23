@@ -21,11 +21,10 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Firma y pie de firma de cada período del directorio.
+ * Firma de cada período del directorio.
  * <p>
- * Se reducen a 200 píxeles de lado mayor al guardarlas. No se rechaza nada por
- * tamaño: quien saca una foto de la firma con el teléfono no tiene por qué
- * abrir un editor antes de subirla.
+ * Se guardan como PNG de hasta 200 píxeles de lado mayor, conservando el canal
+ * alfa que prepara el cliente para poder estamparlas sobre documentos.
  */
 @Service
 @Transactional(readOnly = true)
@@ -52,9 +51,13 @@ public class ImagenCargoService {
                                  String nombreArchivo) {
         Cargo cargo = buscar(cargoId);
         verificarQuePuedeFirmar(cargo);
+        if (tipo != TipoImagenCargo.FIRMA) {
+            throw new ReglaNegocioException(
+                    "El pie de firma ahora se registra como texto, no como imagen.");
+        }
 
         BufferedImage origen = procesador.leer(subido);
-        ProcesadorImagenes.Variante variante = procesador.generar(
+        ProcesadorImagenes.Variante variante = procesador.generarPng(
                 origen, TipoImagenCargo.LADO_MAXIMO, TipoImagenCargo.PESO_MAXIMO);
 
         // Se trabaja sobre la colección del cargo y no sobre el repositorio.
@@ -135,8 +138,7 @@ public class ImagenCargoService {
     }
 
     /**
-     * Solo el presidente y el secretario tienen firma y pie de firma, en los
-     * tres niveles.
+     * Solo los dos primeros cargos de cada nivel tienen firma.
      * <p>
      * Son los que firman lo que emite la organización; al resto de los cargos
      * nadie le pide la firma, así que cargarla sería guardar archivos que no
@@ -144,15 +146,16 @@ public class ImagenCargoService {
      * comprueba acá porque la API se puede llamar directo.
      */
     private void verificarQuePuedeFirmar(Cargo cargo) {
-        if (!cargo.getCargo().puedeFirmar()) {
+        if (!cargo.getAmbito().puedeFirmar(cargo.getCargo())) {
             throw new ReglaNegocioException(String.format(
-                    "El cargo de %s no lleva firma ni pie de firma. Solo el presidente y el "
-                    + "secretario firman.", cargo.getCargo().getEtiqueta().toLowerCase()));
+                    "El cargo de %s no lleva firma en el directorio de %s.",
+                    cargo.getCargo().getEtiqueta().toLowerCase(),
+                    cargo.getAmbito().getEtiqueta().toLowerCase()));
         }
     }
 
     /**
-     * Clave del archivo: {@code firmas/a1b2c3d4e5f6-juan-morales.jpg}.
+     * Clave del archivo: {@code firmas/a1b2c3d4e5f6-juan-morales.png}.
      * <p>
      * Mismo criterio que las fotos de productores: aleatorio adelante para
      * garantizar unicidad e invalidar la caché, nombre atrás para poder
@@ -162,7 +165,7 @@ public class ImagenCargoService {
         String aleatorio = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         String nombre = Textos.paraNombreDeArchivo(
                 cargo.getProductor().getNombreCompleto(), 40);
-        return tipo.getDirectorio() + "/" + aleatorio + "-" + nombre + ".jpg";
+        return tipo.getDirectorio() + "/" + aleatorio + "-" + nombre + ".png";
     }
 
     private String recortar(String nombre) {

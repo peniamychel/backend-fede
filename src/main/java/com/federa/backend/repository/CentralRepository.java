@@ -16,8 +16,8 @@ public interface CentralRepository extends JpaRepository<Central, Long> {
      */
     Optional<Central> findByFederacionIdAndNombreIgnoreCase(Long federacionId, String nombre);
 
-    /** Para avisar del número repetido antes de que lo rechace la clave única. */
-    Optional<Central> findByNumero(String numero);
+    /** Para avisar de la sigla repetida antes de que la rechace la clave única. */
+    Optional<Central> findByAbreviatura(String abreviatura);
 
     long countByFederacionId(Long federacionId);
 }

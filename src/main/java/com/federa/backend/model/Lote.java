@@ -37,8 +37,7 @@ import java.util.List;
  *   <li><b>No lleva restricción de unicidad.</b> El par
  *       (sindicato, número, extensión) se repite 425 veces en el padrón; es
  *       precisamente lo que la revisión anotó como "numero lote (repetido)".
- *       Bloquearlo impediría cargar el padrón tal como está: la duplicación se
- *       anota como {@link Observacion} sobre el productor.</li>
+ *       Bloquearlo impediría cargar el padrón tal como está.</li>
  *   <li><b>estadoOriginal</b> conserva el texto tal cual venía, porque
  *       {@link EstadoLote} agrupa 14 escrituras distintas en 6 estados.</li>
  * </ul>

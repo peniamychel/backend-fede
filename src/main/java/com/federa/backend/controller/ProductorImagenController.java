@@ -44,8 +44,8 @@ public class ProductorImagenController {
     @Operation(summary = "Sube la foto del productor",
             description = """
                     Se sube **una sola** imagen y el servidor deriva las dos variantes que \
-                    guarda: la foto de consulta, reducida a medio mega como máximo, y una \
-                    miniatura para los listados.
+                    guarda: la foto cuadrada PNG de hasta 300 KB, conservando transparencia, \
+                    y una miniatura PNG para los listados.
 
                     No hay límite de tamaño para el archivo que se sube más allá del tope de \
                     cordura del servidor: si la foto pesa varios megas, se reduce al guardarla. \
@@ -53,7 +53,7 @@ public class ProductorImagenController {
                     la máquina hace mejor.
 
                     El formato se acepta si ImageIO puede abrirlo —JPG, PNG, WebP y los JPEG en \
-                    CMYK de algunas cámaras—; todo se guarda como JPEG. Si el productor ya tenía \
+                    CMYK de algunas cámaras—; las fotos de productor se guardan como PNG. Si el productor ya tenía \
                     foto, se reemplaza.""")
     public ImagenSubidaResponse subir(
             @PathVariable Long productorId,

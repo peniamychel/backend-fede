@@ -46,13 +46,13 @@ public class CentralService {
     public CentralResponse crear(CentralRequest request) {
         Federacion federacion = federacionService.buscar(request.federacionId());
         String nombre = Textos.normalizar(request.nombre());
-        String numero = Textos.limpiar(request.numero());
+        String abreviatura = abreviaturaDe(request.abreviatura());
         verificarNombreLibre(federacion.getId(), nombre, null);
-        verificarNumeroLibre(numero, null);
+        verificarAbreviaturaLibre(abreviatura, null);
 
         Central central = new Central();
         central.setNombre(nombre);
-        central.setNumero(numero);
+        central.setAbreviatura(abreviatura);
         central.setFederacion(federacion);
         return CentralResponse.desde(centralRepository.save(central));
     }
@@ -62,12 +62,12 @@ public class CentralService {
         Central central = buscar(id);
         Federacion federacion = federacionService.buscar(request.federacionId());
         String nombre = Textos.normalizar(request.nombre());
-        String numero = Textos.limpiar(request.numero());
+        String abreviatura = abreviaturaDe(request.abreviatura());
         verificarNombreLibre(federacion.getId(), nombre, id);
-        verificarNumeroLibre(numero, id);
+        verificarAbreviaturaLibre(abreviatura, id);
 
         central.setNombre(nombre);
-        central.setNumero(numero);
+        central.setAbreviatura(abreviatura);
         central.setFederacion(federacion);
         // Se fuerza el UPDATE antes de mapear: el oyente de auditoría escribe
         // updatedAt recién al grabar, y sin esto la respuesta saldría con la
@@ -78,7 +78,7 @@ public class CentralService {
 
     /**
      * No se permite borrar una central que todavía tiene sindicatos: el
-     * cascade arrastraría a sus productores, lotes y observaciones. Primero hay
+     * cascade arrastraría a sus productores y a sus lotes. Primero hay
      * que mover o eliminar los sindicatos.
      */
     @Transactional
@@ -104,21 +104,34 @@ public class CentralService {
     }
 
     /**
-     * El número, en cambio, es único entre todas las centrales.
+     * Deja la sigla como se guarda: sin espacios sobrantes y en mayúsculas.
+     * <p>
+     * Se normaliza en el servidor y no solo en el formulario porque de eso
+     * depende que la clave única sirva. La base compara el texto tal cual está
+     * guardado, así que "ivi" y "IVI" le parecerían dos siglas distintas y
+     * dejaría entrar las dos.
+     */
+    private String abreviaturaDe(String valor) {
+        String limpio = Textos.limpiar(valor);
+        return limpio == null ? null : limpio.toUpperCase();
+    }
+
+    /**
+     * La sigla, en cambio, es única entre todas las centrales.
      * <p>
      * Se comprueba acá para poder devolver un mensaje que diga cuál es la otra
      * central. La clave única de la base sigue estando: es la que cubre el caso
      * de dos altas al mismo tiempo, que esta consulta no puede ver.
      */
-    private void verificarNumeroLibre(String numero, Long idActual) {
-        if (numero == null) {
+    private void verificarAbreviaturaLibre(String abreviatura, Long idActual) {
+        if (abreviatura == null) {
             return;
         }
-        centralRepository.findByNumero(numero)
+        centralRepository.findByAbreviatura(abreviatura)
                 .filter(otra -> !otra.getId().equals(idActual))
                 .ifPresent(otra -> {
                     throw new ReglaNegocioException(
-                            "El número " + numero + " ya lo tiene la central "
+                            "La abreviatura " + abreviatura + " ya la tiene la central "
                                     + otra.getNombre());
                 });
     }

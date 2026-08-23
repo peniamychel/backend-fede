@@ -28,7 +28,7 @@ public enum TipoReunion {
 
     /** Convocada por la central, solo para los dirigentes de sus sindicatos. */
     DIRIGENTES_CENTRAL(Ambito.CENTRAL, "Dirigentes de la central",
-            "Asisten los presidentes y secretarios de los sindicatos de la central.", true),
+            "Asisten los Secretarios Generales y Secretarios Relaciones de los sindicatos de la central.", true),
 
     /**
      * Convocada por la federación, para los dirigentes de arriba y de abajo.
@@ -37,7 +37,7 @@ public enum TipoReunion {
      * a toda la dirigencia.
      */
     DIRIGENTES_FEDERACION(Ambito.FEDERACION, "Dirigentes de la federación",
-            "Asisten los presidentes y secretarios de las centrales y de los sindicatos.",
+            "Asisten los Secretarios Generales y Secretarios Relaciones de las centrales y sindicatos.",
             true);
 
     private final Ambito convoca;

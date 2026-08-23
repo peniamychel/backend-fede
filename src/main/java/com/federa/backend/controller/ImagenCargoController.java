@@ -19,8 +19,8 @@ import java.io.IOException;
 @RestController
 @RequestMapping(ApiRutas.V1 + "/cargos/{cargoId}/imagenes")
 @Tag(name = "Firmas del directorio", description =
-        "Firma y pie de firma de cada período del directorio. Van atadas al período y no a la "
-        + "persona: la firma con la que alguien autorizó documentos pertenece a ese mandato.")
+        "Firma de cada período del directorio. Va atada al período y no a la persona: la firma "
+        + "con la que alguien autorizó documentos pertenece a ese mandato.")
 public class ImagenCargoController {
 
     private final ImagenCargoService imagenCargoService;
@@ -30,10 +30,10 @@ public class ImagenCargoController {
     }
 
     @PostMapping(value = "/{tipo}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Sube la firma o el pie de firma",
+    @Operation(summary = "Sube la firma",
             description = """
-                    `tipo` es FIRMA o PIE_FIRMA. Se acepta cualquier tamaño de archivo: la \
-                    imagen se reduce a 200 píxeles de lado mayor al guardarla, conservando la \
+                    `tipo` es FIRMA. Se acepta cualquier tamaño de archivo: la \
+                    imagen se guarda como PNG transparente y se reduce a 200 píxeles de lado mayor, conservando la \
                     proporción —una firma apaisada queda 200 de ancho y lo que corresponda de \
                     alto, en vez de estirarse a un cuadrado.
 
@@ -42,7 +42,7 @@ public class ImagenCargoController {
     public CargoResponse subir(
             @PathVariable Long cargoId,
 
-            @Parameter(description = "FIRMA o PIE_FIRMA, en cualquier combinación de mayúsculas.",
+            @Parameter(description = "FIRMA, en cualquier combinación de mayúsculas.",
                     example = "firma")
             @PathVariable TipoImagenCargo tipo,
 
@@ -64,7 +64,7 @@ public class ImagenCargoController {
     }
 
     @DeleteMapping("/{tipo}")
-    @Operation(summary = "Borra la firma o el pie de firma",
+    @Operation(summary = "Borra una imagen histórica del cargo",
             description = "Devuelve el período actualizado, no un 204: el cargo sigue "
                     + "existiendo, solo pierde esa imagen.")
     public CargoResponse eliminar(@PathVariable Long cargoId,

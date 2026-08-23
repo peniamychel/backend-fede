@@ -10,16 +10,28 @@ import java.util.Optional;
 
 public interface AsistenciaRepository extends JpaRepository<Asistencia, Long> {
 
-    Optional<Asistencia> findByReunionIdAndProductorId(Long reunionId, Long productorId);
+    Optional<Asistencia> findByLlamadaIdAndProductorId(Long llamadaId, Long productorId);
 
-    long countByReunionId(Long reunionId);
+    long countByLlamadaId(Long llamadaId);
 
-    List<Asistencia> findByReunionIdOrderByRegistradaEnAsc(Long reunionId);
+    /** Cuántos se registraron en toda la reunión, sumando sus vueltas. */
+    long countByLlamadaReunionId(Long reunionId);
+
+    List<Asistencia> findByLlamadaIdOrderByRegistradaEnAsc(Long llamadaId);
 
     /**
-     * Ids de los presentes, para marcar la lista de convocados sin traer las
-     * filas enteras.
+     * Ids de los presentes en una vuelta, para marcar la lista de convocados sin
+     * traer las filas enteras.
      */
-    @Query("select a.productor.id from Asistencia a where a.reunion.id = :reunionId")
-    List<Long> findProductoresPresentes(@Param("reunionId") Long reunionId);
+    @Query("select a.productor.id from Asistencia a where a.llamada.id = :llamadaId")
+    List<Long> findProductoresPresentes(@Param("llamadaId") Long llamadaId);
+
+    /**
+     * Ids de los que estuvieron en alguna vuelta de la reunión.
+     * <p>
+     * Sirve para el resumen: quien vino a la primera y se fue igual estuvo.
+     */
+    @Query("select distinct a.productor.id from Asistencia a "
+            + "where a.llamada.reunion.id = :reunionId")
+    List<Long> findProductoresPresentesEnLaReunion(@Param("reunionId") Long reunionId);
 }

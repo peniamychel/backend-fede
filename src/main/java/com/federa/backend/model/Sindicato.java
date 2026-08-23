@@ -61,6 +61,10 @@ public class Sindicato extends EntidadAuditable {
     @Column(length = 20)
     private String numero;
 
+    /** Clave de la imagen del sello institucional en el almacén de objetos. */
+    @Column(name = "sello_clave", length = 200)
+    private String selloClave;
+
     /**
      * Latitud de la sede, en grados decimales. Null mientras no se haya
      * marcado en el mapa.

@@ -12,6 +12,12 @@ public record FederacionRequest(
                 example = "FEDERA", maxLength = 80, requiredMode = Schema.RequiredMode.REQUIRED)
         @NotBlank(message = "el nombre de la federación es obligatorio")
         @Size(max = 80, message = "el nombre no puede superar los 80 caracteres")
-        String nombre
+        String nombre,
+
+        @Schema(description = "Número que la identifica. Opcional, pero si se manda no puede "
+                + "estar repetido en otra federación. Se guarda sin espacios sobrantes.",
+                example = "3", maxLength = 20)
+        @Size(max = 20, message = "el número no puede superar los 20 caracteres")
+        String numero
 ) {
 }

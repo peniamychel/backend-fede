@@ -34,30 +34,69 @@ public interface ProductorRepository extends JpaRepository<Productor, Long> {
 
     List<Productor> findByCi(String ci);
 
-    /** Retorna lista porque el padrón trae 208 carnés repetidos. */
-    List<Productor> findByCarnetProductor(String carnetProductor);
-
     long countBySindicatoId(Long sindicatoId);
 
     /**
      * Listado principal del padrón. Los tres filtros son opcionales y
      * combinables: buscar un texto dentro de una central, dentro de un
      * sindicato, o en todo el padrón.
+     * <p>
+     * El texto se contrasta contra las cuatro formas en que se nombra a alguien
+     * en la práctica: el nombre, el apellido, la cédula que trae en la mano, y
+     * cualquiera de los dos códigos —el de la credencial, que es lo que dice el
+     * QR, y el del padrón ({@code 2-IVI-1}), que es lo que está impreso y lo
+     * que la gente lee en voz alta—.
+     * <p>
+     * El código del padrón no está guardado: se arma con el número de la
+     * federación, la sigla de la central y el correlativo. Se arma también acá,
+     * en la consulta, y no se guarda en una columna, por lo mismo que en
+     * {@code CodigoPadron}: el día que a una central le pongan la sigla, sus
+     * productores pasan a ser buscables por código sin tocar una fila.
      */
     @Query("""
             select p from Productor p
-            where (:sindicatoId is null or p.sindicato.id = :sindicatoId)
-              and (:centralId is null or p.sindicato.central.id = :centralId)
+              join p.sindicato s
+              join s.central c
+              join c.federacion f
+            where (:sindicatoId is null or s.id = :sindicatoId)
+              and (:centralId is null or c.id = :centralId)
               and (:texto is null
                    or upper(p.nombres) like upper(concat('%', :texto, '%'))
                    or upper(p.apellidos) like upper(concat('%', :texto, '%'))
                    or p.ci like concat('%', :texto, '%')
-                   or p.carnetProductor like concat('%', :texto, '%'))
+                   or upper(p.codigo) = upper(:texto)
+                   or upper(concat(f.numero, '-', c.abreviatura, '-', p.correlativo))
+                        = upper(:texto))
             """)
     Page<Productor> filtrar(@Param("sindicatoId") Long sindicatoId,
                             @Param("centralId") Long centralId,
                             @Param("texto") String texto,
                             Pageable pageable);
+
+    /**
+     * El correlativo más alto entregado en una central, para saber cuál sigue.
+     * <p>
+     * Devuelve null si la central no tiene ningún productor numerado todavía,
+     * que es el caso de la primera alta: ahí el que sigue es el 1.
+     * <p>
+     * {@code sindicatoExcluido} deja fuera de la cuenta a un sindicato. Sirve
+     * cuando el sindicato acaba de mudarse a esta central y hay que renumerarlo:
+     * sus productores ya figuran acá con los números que traían de la central
+     * anterior, y contarlos correría el siguiente hacia arriba dejando un hueco.
+     */
+    @Query("""
+            select max(p.correlativo) from Productor p
+            where p.sindicato.central.id = :centralId
+              and (:sindicatoExcluido is null or p.sindicato.id <> :sindicatoExcluido)
+            """)
+    Integer maxCorrelativoDeCentral(@Param("centralId") Long centralId,
+                                    @Param("sindicatoExcluido") Long sindicatoExcluido);
+
+    /**
+     * Los productores de un sindicato, para renumerarlos cuando el sindicato
+     * entero se muda a otra central.
+     */
+    List<Productor> findBySindicatoIdOrderByIdAsc(Long sindicatoId);
 
     /** Productores sin fotografía cargada: 3.113 en el padrón original. */
     @Query("select p from Productor p where p.fotoDescripcion is null or p.fotoDescripcion = ''")
@@ -85,13 +124,4 @@ public interface ProductorRepository extends JpaRepository<Productor, Long> {
             where p.sindicato.central.federacion.id = :federacionId
             """)
     List<Object[]> findIdentidadesPorFederacion(@Param("federacionId") Long federacionId);
-
-    /** Carnés de productor asignados a más de una persona. */
-    @Query("""
-            select p.carnetProductor from Productor p
-            where p.carnetProductor is not null
-            group by p.carnetProductor
-            having count(p) > 1
-            """)
-    List<String> findCarnetsDuplicados();
 }

@@ -1,6 +1,7 @@
 package com.federa.backend.service;
 
 import com.federa.backend.dto.CredencialProductor;
+import com.federa.backend.dto.DisenoCredencial;
 import com.lowagie.text.pdf.PdfReader;
 import com.lowagie.text.pdf.parser.PdfTextExtractor;
 import org.junit.jupiter.api.DisplayName;
@@ -41,8 +42,10 @@ class CredencialProductorPdfTest {
                                            CredencialProductor.Firmante secretario) {
         return new CredencialProductor(
                 "FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
-                "CANDIDO", "COLQUECHAMBI MAMANI", "3692655", "2053", "12-A",
-                foto, presidente, secretario, "09/08/2026", "AB12CD34EF", qr());
+                "CANDIDO", "COLQUECHAMBI MAMANI", "3692655", "12-A",
+                foto, null, null, null, presidente, secretario, null,
+                "09/08/2026", "AB12CD34EF",
+                "2-1MO-7", qr());
     }
 
     private String texto(byte[] pdf, int pagina) throws IOException {
@@ -61,6 +64,18 @@ class CredencialProductorPdfTest {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setColor(new Color(205, 220, 235));
         g.fillRect(0, 0, 240, 320);
+        g.setColor(new Color(120, 140, 165));
+        g.fillOval(80, 55, 80, 80);
+        g.fillOval(45, 150, 150, 190);
+        g.dispose();
+        return aPng(lienzo);
+    }
+
+    /** Retrato con fondo transparente: la Wiphala debe seguir viéndose debajo. */
+    private byte[] retratoSinFondo() throws IOException {
+        BufferedImage lienzo = new BufferedImage(240, 320, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = lienzo.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setColor(new Color(120, 140, 165));
         g.fillOval(80, 55, 80, 80);
         g.fillOval(45, 150, 150, 190);
@@ -151,27 +166,39 @@ class CredencialProductorPdfTest {
         String anverso = texto(generador.generar(credencial(null, null, null)), 1);
 
         assertThat(anverso)
-                .contains("FEDERACIÓN CARRASCO")
-                .contains("CREDENCIAL DE PRODUCTOR")
-                .contains("COLQUECHAMBI MAMANI")
-                .contains("CANDIDO")
-                .contains("3692655")
-                .contains("2053")
+                .contains("CANDIDO COLQUECHAMBI MAMANI")
                 .contains("12-A")
-                .contains("SINDICATO ALTO SAN SALVADOR")
-                .contains("CENTRAL 1RO MAYO");
+                .contains("ALTO SAN SALVADOR")
+                .contains("1RO MAYO")
+                .contains("CARRASCO")
+                .contains("2-1MO-7");
+        // La plantilla no tiene campo de cédula; el N° superior es el código
+        // institucional del padrón.
+        assertThat(anverso).doesNotContain("3692655");
     }
 
     @Test
-    @DisplayName("el reverso lleva los dos cargos, no los datos del productor")
+    @DisplayName("el número de productor ya no va en la credencial")
+    void sinNumeroDeProductor() throws IOException {
+        // Lo reemplazó el código del padrón, que además dice dónde está la
+        // persona. El carné sigue existiendo en la ficha y en la búsqueda; lo
+        // que se quitó es imprimirlo acá, y con él el campo del record que lo
+        // traía hasta el dibujo.
+        String anverso = texto(generador.generar(credencial(null, null, null)), 1);
+
+        assertThat(anverso).doesNotContain("N° PRODUCTOR");
+        // El rótulo está en la imagen de fondo; el valor variable sigue estando.
+        assertThat(anverso).contains("12-A");
+    }
+
+    @Test
+    @DisplayName("el reverso reserva los tres niveles, no los datos del productor")
     void reversoConDirectorio() throws IOException {
         String reverso = texto(generador.generar(credencial(null, null, null)), 2);
 
-        assertThat(reverso)
-                .contains("SINDICATO ALTO SAN SALVADOR")
-                .contains("PRESIDENTE")
-                .contains("SECRETARIO")
-                .contains("personal e intransferible");
+        // Los nombres de nivel y el texto legal están rasterizados en la
+        // plantilla. Lo variable son los tres bloques de firma.
+        assertThat(reverso).contains("SIN FIRMANTE");
         // La cédula va solo en el anverso: repetirla atrás gastaría el espacio
         // que necesitan las firmas.
         assertThat(reverso).doesNotContain("3692655");
@@ -194,16 +221,17 @@ class CredencialProductorPdfTest {
     }
 
     @Test
-    @DisplayName("con sello, el sello reemplaza al nombre escrito")
+    @DisplayName("el pie automático siempre imprime nombre, cargo y organización")
     void firmantesConSello() throws IOException {
         CredencialProductor.Firmante presidente = new CredencialProductor.Firmante(
-                "ALBERTO CHOQUE", firmaDe("a"), selloDe("ALBERTO CHOQUE", "PRESIDENTE"));
+                "ALBERTO CHOQUE", firmaDe("a"),
+                selloDe("ALBERTO CHOQUE", "SECRETARIO GENERAL"));
 
         String reverso = texto(generador.generar(
                 credencial(null, presidente, null)), 2);
 
-        assertThat(reverso).contains("PRESIDENTE");
-        assertThat(reverso).doesNotContain("ALBERTO CHOQUE");
+        assertThat(reverso).contains("SECRETARIO GENERAL");
+        assertThat(reverso).contains("ALBERTO CHOQUE");
     }
 
     @Test
@@ -219,12 +247,11 @@ class CredencialProductorPdfTest {
     }
 
     @Test
-    @DisplayName("sin directorio la credencial sale igual, para firmar a mano")
+    @DisplayName("sin directorio se señalan los tres firmantes faltantes")
     void sinDirectorio() throws IOException {
         String reverso = texto(generador.generar(credencial(retrato(), null, null)), 2);
 
-        // Los rótulos y las líneas están; lo que falta es la firma.
-        assertThat(reverso).contains("PRESIDENTE").contains("SECRETARIO");
+        assertThat(reverso).contains("SIN FIRMANTE");
     }
 
     @Test
@@ -242,14 +269,58 @@ class CredencialProductorPdfTest {
         CredencialProductor largo = new CredencialProductor(
                 "FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
                 "MARÍA DE LOS ÁNGELES", "COLQUECHAMBI DE VILLARROEL SAAVEDRA",
-                "8005906-1V", "12002", "50-51, 57-A", null, null, null, "09/08/2026",
-                "AB12CD34EF", qr());
+                "8005906-1V", "50-51, 57-A", null, null, null, "09/08/2026",
+                "AB12CD34EF", "2-1MO-7", qr());
 
         String anverso = texto(generador.generar(largo), 1);
 
         assertThat(anverso).contains("COLQUECHAMBI DE VILLARROEL SAAVEDRA");
         assertThat(anverso).contains("MARÍA DE LOS ÁNGELES");
-        assertThat(anverso).contains("8005906-1V");
+        assertThat(anverso).doesNotContain("8005906-1V");
+    }
+
+    @Test
+    @DisplayName("el código del padrón va impreso en el anverso")
+    void codigoDelPadron() throws IOException {
+        String anverso = texto(generador.generar(credencial(null, null, null)), 1);
+
+        assertThat(anverso).contains("2-1MO-7");
+    }
+
+    @Test
+    @DisplayName("un campo agregado en el editor también se imprime en el PDF")
+    void campoAgregadoPorEditor() throws IOException {
+        DisenoCredencial base = DisenoCredencial.porDefecto();
+        List<DisenoCredencial.Elemento> elementos = new ArrayList<>(base.elementos());
+        elementos.add(new DisenoCredencial.Elemento(
+                "ci-agregada", DisenoCredencial.Cara.CARA,
+                DisenoCredencial.Tipo.TEXTO, "CI", "Cédula de identidad",
+                12f, 12f, 70f, 8f, 8f, true,
+                DisenoCredencial.Alineacion.IZQUIERDA, "#000000", ""));
+
+        DisenoCredencial editado = new DisenoCredencial(base.ancho(), base.alto(), elementos);
+        String anverso = texto(generador.generar(
+                credencial(null, null, null), editado), 1);
+
+        assertThat(anverso).contains("3692655");
+    }
+
+    @Test
+    @DisplayName("sin código del padrón no se imprime nada en su lugar")
+    void sinCodigoDelPadron() throws IOException {
+        // Es lo que pasa mientras la federación no tenga número o la central no
+        // tenga sigla. Antes que un "--1" impreso en una credencial que después
+        // circula en papel, no va nada.
+        CredencialProductor sinCodigo = new CredencialProductor(
+                "FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
+                "CANDIDO", "COLQUECHAMBI MAMANI", "3692655", "12-A",
+                null, null, null, "09/08/2026", "AB12CD34EF", null, qr());
+
+        String anverso = texto(generador.generar(sinCodigo), 1);
+
+        assertThat(anverso).doesNotContain("CÓDIGO");
+        // Y el resto de la credencial sale igual.
+        assertThat(anverso).contains("COLQUECHAMBI MAMANI");
     }
 
     @Test
@@ -276,8 +347,9 @@ class CredencialProductorPdfTest {
         for (int i = 1; i <= 12; i++) {
             tanda.add(new CredencialProductor(
                     "FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
-                    "PRODUCTOR " + i, "APELLIDO " + i, "800000" + i, "CP" + i, String.valueOf(i),
-                    null, null, null, "09/08/2026", "CP" + i + "QR", qr()));
+                    "PRODUCTOR " + i, "APELLIDO " + i, "800000" + i, String.valueOf(i),
+                    null, null, null, "09/08/2026", "CP" + i + "QR",
+                    "2-1MO-" + i, qr()));
         }
 
         byte[] pdf = generador.generarPliego(tanda);
@@ -341,22 +413,36 @@ class CredencialProductorPdfTest {
     @Test
     @DisplayName("deja muestras en target/ para revisarlas a ojo")
     void muestrasParaRevisar() throws IOException {
-        CredencialProductor.Firmante presidente = new CredencialProductor.Firmante(
-                "ALBERTO CHOQUE MAMANI", firmaDe("presidente"),
-                selloDe("ALBERTO CHOQUE", "PRESIDENTE"));
-        CredencialProductor.Firmante secretario = new CredencialProductor.Firmante(
-                "BEATRIZ LIMACHI QUISPE", firmaDe("secretario"), null);
+        CredencialProductor.Firmante ejecutivo = new CredencialProductor.Firmante(
+                "ALBERTO CHOQUE MAMANI", "EJECUTIVO", "FEDERACIÓN CARRASCO",
+                firmaDe("ejecutivo"));
+        CredencialProductor.Firmante secretarioCentral = new CredencialProductor.Firmante(
+                "BEATRIZ LIMACHI QUISPE", "SECRETARIO GENERAL", "CENTRAL 1RO MAYO",
+                firmaDe("central"));
+        CredencialProductor.Firmante secretarioSindicato = new CredencialProductor.Firmante(
+                "CARLOS MAMANI COLQUE", "SECRETARIO GENERAL", "ALTO SAN SALVADOR",
+                firmaDe("sindicato"));
+
+        CredencialProductor muestra = new CredencialProductor(
+                "FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
+                "CANDIDO", "COLQUECHAMBI MAMANI", "3692655", "12-A", retratoSinFondo(),
+                selloDe("FEDERACIÓN", "CARRASCO"), selloDe("CENTRAL", "1RO MAYO"),
+                selloDe("SINDICATO", "ALTO SAN SALVADOR"), ejecutivo,
+                secretarioCentral, secretarioSindicato, "09/08/2026", "AB12CD34EF",
+                "2-1MO-7", qr());
 
         Files.write(Path.of("target", "credencial-de-muestra.pdf"),
-                generador.generar(credencial(retrato(), presidente, secretario)));
+                generador.generar(muestra));
 
         List<CredencialProductor> tanda = new ArrayList<>();
         for (int i = 1; i <= 6; i++) {
             tanda.add(new CredencialProductor(
                     "FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
                     "PRODUCTOR " + i, "APELLIDO LARGO NUMERO " + i, "800000" + i,
-                    "CP" + i, String.valueOf(i), retrato(), presidente, secretario,
-                    "09/08/2026", "MUESTRA" + i, qr()));
+                    String.valueOf(i), retratoSinFondo(), muestra.selloFederacion(),
+                    muestra.selloCentral(), muestra.selloSindicato(), ejecutivo,
+                    secretarioCentral, secretarioSindicato, "09/08/2026", "MUESTRA" + i,
+                    "2-1MO-" + i, qr()));
         }
         Files.write(Path.of("target", "credenciales-pliego.pdf"),
                 generador.generarPliego(tanda));

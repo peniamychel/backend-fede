@@ -35,12 +35,6 @@ public record ProductorRequest(
         @Size(max = 20, message = "la cédula no puede superar los 20 caracteres")
         String ci,
 
-        @Schema(description = "Carné de productor. Texto, admite el valor `NUEVO`. No se exige "
-                + "único, el padrón tiene 208 repetidos.",
-                example = "1226", maxLength = 20)
-        @Size(max = 20, message = "el carné de productor no puede superar los 20 caracteres")
-        String carnetProductor,
-
         @Schema(description = "Nombre corregido propuesto en la revisión, cuando el de la "
                 + "planilla no coincide con el documento. Columna `Nombre x`.",
                 example = "CONSTANTINA", maxLength = 60)

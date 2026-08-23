@@ -1,6 +1,7 @@
 package com.federa.backend.service;
 
 import com.federa.backend.dto.CredencialProductor;
+import com.federa.backend.dto.DisenoCredencial;
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
@@ -17,6 +18,8 @@ import org.springframework.stereotype.Component;
 
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 
 /**
@@ -40,8 +43,6 @@ public class CredencialProductorPdf {
     /** 53,98 mm en puntos. */
     public static final float ALTO = 153.01f;
 
-    private static final float BANDA_SUPERIOR = 26f;
-    private static final float BANDA_INFERIOR = 22f;
     private static final float MARGEN = 8f;
 
     /**
@@ -58,20 +59,21 @@ public class CredencialProductorPdf {
     /** Separación entre tarjetas, para que la tijera tenga por dónde entrar. */
     static final float AIRE = 12f;
 
-    private static final Color VERDE = new Color(20, 74, 58);
-    private static final Color GRIS_FONDO = new Color(238, 238, 238);
     private static final Color GRIS_LINEA = new Color(170, 170, 170);
-    private static final Color GRIS_ROTULO = new Color(115, 115, 115);
-
-    private static final Font TITULO = fuente(7.5f, Font.BOLD, Color.WHITE);
-    private static final Font SUBTITULO = fuente(5.5f, Font.NORMAL, new Color(210, 225, 218));
-    private static final Font ROTULO = fuente(5.5f, Font.NORMAL, GRIS_ROTULO);
+    private static final Font ROTULO = fuente(5.5f, Font.NORMAL, new Color(115, 115, 115));
     private static final Font VALOR = fuente(8f, Font.BOLD, Color.BLACK);
-    private static final Font PIE_FUERTE = fuente(6.5f, Font.BOLD, Color.BLACK);
-    private static final Font PIE_SUAVE = fuente(6f, Font.NORMAL, new Color(70, 70, 70));
-    private static final Font CARGO = fuente(6.5f, Font.BOLD, Color.BLACK);
-    private static final Font NOMBRE_FIRMANTE = fuente(5.5f, Font.NORMAL, new Color(60, 60, 60));
-    private static final Font NOTA = fuente(5f, Font.NORMAL, GRIS_ROTULO);
+    private static final Font DATO_PLANTILLA = fuente(8f, Font.BOLD, Color.BLACK);
+    private static final Font NUMERO_PLANTILLA = fuente(10f, Font.BOLD, new Color(90, 15, 10));
+    private static final Font FIRMA_NOMBRE = fuente(4.2f, Font.BOLD, Color.BLACK);
+    private static final Font FIRMA_CARGO = fuente(4f, Font.BOLD, Color.BLACK);
+    private static final Font FIRMA_ORGANIZACION = fuente(3.8f, Font.NORMAL, Color.BLACK);
+
+    private static final String PLANTILLA_CARA = "/plantillas/credencial/cara.jpg";
+    private static final String PLANTILLA_REVERSO = "/plantillas/credencial/reverso.jpg";
+
+    /** Las copias conservan el mismo serial y OpenPDF incrusta cada fondo una sola vez. */
+    private final Image plantillaCara = cargarPlantilla(PLANTILLA_CARA);
+    private final Image plantillaReverso = cargarPlantilla(PLANTILLA_REVERSO);
 
     // -------------------------------------------------------- documentos
 
@@ -83,6 +85,10 @@ public class CredencialProductorPdf {
      * cara en tamaño real y recortar.
      */
     public byte[] generar(CredencialProductor credencial) {
+        return generar(credencial, DisenoCredencial.porDefecto());
+    }
+
+    public byte[] generar(CredencialProductor credencial, DisenoCredencial diseno) {
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
         Document documento = new Document(new Rectangle(ANCHO, ALTO), 0, 0, 0, 0);
         try {
@@ -90,12 +96,12 @@ public class CredencialProductorPdf {
             documento.open();
             PdfContentByte lienzo = escritor.getDirectContent();
 
-            dibujarAnverso(lienzo, 0, 0, credencial);
+            dibujarAnverso(lienzo, 0, 0, credencial, diseno);
             // Sin esto la página se descarta: para el documento está vacía,
             // porque todo se pintó directamente sobre la hoja.
             escritor.setPageEmpty(false);
             documento.newPage();
-            dibujarReverso(lienzo, 0, 0, credencial);
+            dibujarReverso(lienzo, 0, 0, credencial, diseno);
             escritor.setPageEmpty(false);
 
             documento.close();
@@ -116,6 +122,11 @@ public class CredencialProductorPdf {
      * descartar.
      */
     public byte[] generarPliego(List<CredencialProductor> credenciales) {
+        return generarPliego(credenciales, DisenoCredencial.porDefecto());
+    }
+
+    public byte[] generarPliego(List<CredencialProductor> credenciales,
+                                DisenoCredencial diseno) {
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
         Document documento = new Document(PageSize.LETTER, 0, 0, 0, 0);
         try {
@@ -130,11 +141,11 @@ public class CredencialProductorPdf {
                 if (desde > 0) {
                     documento.newPage();
                 }
-                dibujarHoja(lienzo, tanda, false);
+                dibujarHoja(lienzo, tanda, false, diseno);
                 escritor.setPageEmpty(false);
 
                 documento.newPage();
-                dibujarHoja(lienzo, tanda, true);
+                dibujarHoja(lienzo, tanda, true, diseno);
                 escritor.setPageEmpty(false);
             }
             documento.close();
@@ -145,13 +156,13 @@ public class CredencialProductorPdf {
     }
 
     private void dibujarHoja(PdfContentByte lienzo, List<CredencialProductor> tanda,
-                             boolean reverso) {
+                             boolean reverso, DisenoCredencial diseno) {
         for (int i = 0; i < tanda.size(); i++) {
             float[] esquina = posicionEnHoja(i, reverso);
             if (reverso) {
-                dibujarReverso(lienzo, esquina[0], esquina[1], tanda.get(i));
+                dibujarReverso(lienzo, esquina[0], esquina[1], tanda.get(i), diseno);
             } else {
-                dibujarAnverso(lienzo, esquina[0], esquina[1], tanda.get(i));
+                dibujarAnverso(lienzo, esquina[0], esquina[1], tanda.get(i), diseno);
             }
         }
     }
@@ -189,85 +200,14 @@ public class CredencialProductorPdf {
     /** Pinta el anverso con la esquina inferior izquierda en (x, y). */
     public void dibujarAnverso(PdfContentByte lienzo, float x, float y,
                                CredencialProductor c) {
-        // Banda del título.
-        lienzo.setColorFill(VERDE);
-        lienzo.rectangle(x, y + ALTO - BANDA_SUPERIOR, ANCHO, BANDA_SUPERIOR);
-        lienzo.fill();
-        centrado(lienzo, c.federacion(), ajustar(c.federacion(), TITULO, ANCHO - 12),
-                x + ANCHO / 2f, y + ALTO - 12f);
-        centrado(lienzo, "CREDENCIAL DE PRODUCTOR", SUBTITULO,
-                x + ANCHO / 2f, y + ALTO - 21f);
-
-        // Foto, con recuadro para que se note aunque falte.
-        float fotoAncho = 46f;
-        float fotoAlto = 60f;
-        float fotoX = x + MARGEN + 1f;
-        float fotoY = y + ALTO - BANDA_SUPERIOR - 7f - fotoAlto;
-        lienzo.setColorStroke(GRIS_LINEA);
-        lienzo.setLineWidth(0.5f);
-        lienzo.rectangle(fotoX, fotoY, fotoAncho, fotoAlto);
-        lienzo.stroke();
-        Image foto = imagen(c.foto(), fotoAncho - 2f, fotoAlto - 2f);
-        if (foto != null) {
-            foto.setAbsolutePosition(
-                    fotoX + (fotoAncho - foto.getScaledWidth()) / 2f,
-                    fotoY + (fotoAlto - foto.getScaledHeight()) / 2f);
-            agregar(lienzo, foto);
-        } else {
-            centrado(lienzo, "SIN FOTO", ROTULO, fotoX + fotoAncho / 2f,
-                    fotoY + fotoAlto / 2f - 2f);
-        }
-
-        // El QR, a la derecha del todo. Es lo que se escanea para pasar lista,
-        // así que va en un borde: apoyar la tarjeta contra el lector no
-        // depende de acertarle al centro.
-        float ladoQr = 34f;
-        float qrX = x + ANCHO - MARGEN - ladoQr;
-        float qrY = y + 60f;
-        Image qr = imagen(c.qr(), ladoQr, ladoQr);
-        if (qr != null) {
-            qr.setAbsolutePosition(qrX, qrY);
-            agregar(lienzo, qr);
-            // El código escrito debajo: cuando la cámara no coopera —de noche,
-            // en el campo— se teclea a mano y la lista sigue avanzando.
-            centrado(lienzo, c.codigo(), ROTULO, qrX + ladoQr / 2f, qrY - 7f);
-        }
-
-        // Columna de datos, entre la foto y el QR.
-        float datosX = fotoX + fotoAncho + 9f;
-        float datosAncho = qrX - 8f - datosX;
-        float tope = y + ALTO - BANDA_SUPERIOR - 6f;
-
-        campo(lienzo, "APELLIDOS", c.apellidos(), datosX, tope, datosAncho);
-        campo(lienzo, "NOMBRES", c.nombres(), datosX, tope - 24f, datosAncho);
-        campo(lienzo, "C.I.", c.ci(), datosX, tope - 48f, datosAncho);
-
-        // La última fila va partida: los dos números son cortos y entran
-        // juntos, y así no se desperdicia una fila entera.
-        float mitad = datosAncho / 2f;
-        campo(lienzo, "N° PRODUCTOR", c.carnetProductor(), datosX, tope - 72f, mitad - 4f);
-        campo(lienzo, "N° LOTE", c.lotes(), datosX + mitad, tope - 72f, mitad);
-
-        // Banda del pie, con la pertenencia.
-        lienzo.setColorFill(GRIS_FONDO);
-        lienzo.rectangle(x, y, ANCHO, BANDA_INFERIOR);
-        lienzo.fill();
-        izquierda(lienzo, "SINDICATO " + c.sindicato(),
-                ajustar("SINDICATO " + c.sindicato(), PIE_FUERTE, ANCHO - 2 * MARGEN),
-                x + MARGEN, y + 12.5f);
-        izquierda(lienzo, "CENTRAL " + c.central(),
-                ajustar("CENTRAL " + c.central(), PIE_SUAVE, ANCHO - 2 * MARGEN),
-                x + MARGEN, y + 4.5f);
-
-        marco(lienzo, x, y);
+        dibujarAnverso(lienzo, x, y, c, DisenoCredencial.porDefecto());
     }
 
-    /** Rótulo chico arriba y el valor debajo, encogido si no entra. */
-    private void campo(PdfContentByte lienzo, String rotulo, String valor,
-                       float x, float tope, float ancho) {
-        izquierda(lienzo, rotulo, ROTULO, x, tope - 6f);
-        String texto = valor == null || valor.isBlank() ? "—" : valor;
-        izquierda(lienzo, texto, ajustar(texto, VALOR, ancho), x, tope - 16f);
+    public void dibujarAnverso(PdfContentByte lienzo, float x, float y,
+                               CredencialProductor c, DisenoCredencial diseno) {
+        fondo(lienzo, x, y, plantillaCara);
+        dibujarElementos(lienzo, x, y, c, diseno, DisenoCredencial.Cara.CARA);
+        marco(lienzo, x, y);
     }
 
     // ---------------------------------------------------------- reverso
@@ -275,71 +215,179 @@ public class CredencialProductorPdf {
     /** Pinta el reverso con la esquina inferior izquierda en (x, y). */
     public void dibujarReverso(PdfContentByte lienzo, float x, float y,
                                CredencialProductor c) {
-        lienzo.setColorFill(VERDE);
-        lienzo.rectangle(x, y + ALTO - 20f, ANCHO, 20f);
-        lienzo.fill();
-        centrado(lienzo, "SINDICATO " + c.sindicato(),
-                ajustar("SINDICATO " + c.sindicato(), TITULO, ANCHO - 12),
-                x + ANCHO / 2f, y + ALTO - 13f);
+        dibujarReverso(lienzo, x, y, c, DisenoCredencial.porDefecto());
+    }
 
-        float ancho = (ANCHO - 3 * MARGEN) / 2f;
-        firmante(lienzo, x + MARGEN, y, ancho, "PRESIDENTE", c.presidente());
-        firmante(lienzo, x + MARGEN * 2 + ancho, y, ancho, "SECRETARIO", c.secretario());
-
-        if (c.emitidaEl() != null && !c.emitidaEl().isBlank()) {
-            centrado(lienzo, "Emitida el " + c.emitidaEl(), NOTA, x + ANCHO / 2f, y + 33f);
-        }
-
-        // Pie con la advertencia. Va chico a propósito: es letra de respaldo,
-        // no algo que haya que leer de lejos.
-        lienzo.setColorFill(GRIS_FONDO);
-        lienzo.rectangle(x, y, ANCHO, 24f);
-        lienzo.fill();
-        centrado(lienzo, "Acredita la afiliación al padrón de la federación.", NOTA,
-                x + ANCHO / 2f, y + 14f);
-        centrado(lienzo, "Es personal e intransferible.", NOTA, x + ANCHO / 2f, y + 6f);
-
+    public void dibujarReverso(PdfContentByte lienzo, float x, float y,
+                               CredencialProductor c, DisenoCredencial diseno) {
+        fondo(lienzo, x, y, plantillaReverso);
+        dibujarElementos(lienzo, x, y, c, diseno, DisenoCredencial.Cara.REVERSO);
         marco(lienzo, x, y);
     }
 
-    /**
-     * Un bloque de firma: la firma arriba, la línea, el cargo, y debajo el
-     * sello.
-     * <p>
-     * Sin firma cargada queda el espacio en blanco, que es lo que hace falta
-     * para firmar a mano. Sin sello se imprime el nombre, que cumple la misma
-     * función de decir quién firma.
-     */
-    private void firmante(PdfContentByte lienzo, float x, float y, float ancho,
-                          String cargo, CredencialProductor.Firmante firmante) {
-        Image firma = imagen(firmante == null ? null : firmante.firma(), ancho, 38f);
-        if (firma != null) {
-            firma.setAbsolutePosition(
-                    x + (ancho - firma.getScaledWidth()) / 2f, y + 94f);
-            agregar(lienzo, firma);
+    private void dibujarElementos(PdfContentByte lienzo, float origenX, float origenY,
+                                  CredencialProductor c, DisenoCredencial diseno,
+                                  DisenoCredencial.Cara cara) {
+        for (DisenoCredencial.Elemento e : diseno.elementos()) {
+            if (e.cara() != cara) continue;
+            if (e.tipo() == DisenoCredencial.Tipo.TEXTO) {
+                dibujarTexto(lienzo, origenX, origenY, c, e);
+            } else if (e.tipo() == DisenoCredencial.Tipo.IMAGEN) {
+                dibujarImagen(lienzo, origenX, origenY, c, e);
+            } else if (e.tipo() == DisenoCredencial.Tipo.PIE_FIRMA) {
+                dibujarPie(lienzo, origenX, origenY, firmante(c, e.campo()), e);
+            }
         }
+    }
 
+    private void dibujarTexto(PdfContentByte lienzo, float origenX, float origenY,
+                              CredencialProductor c, DisenoCredencial.Elemento e) {
+        String texto = valorCampo(c, e);
+        Font base = fuente(e.tamanoFuente(), e.negrita() ? Font.BOLD : Font.NORMAL,
+                color(e.color()));
+        Font ajustada = ajustar(texto, base, e.ancho());
+        float px = origenX + e.x();
+        float py = origenY + e.y();
+        if (e.alineacion() == DisenoCredencial.Alineacion.CENTRO) {
+            centrado(lienzo, texto, ajustada, px + e.ancho() / 2f, py);
+        } else if (e.alineacion() == DisenoCredencial.Alineacion.DERECHA) {
+            derecha(lienzo, texto, ajustada, px + e.ancho(), py);
+        } else {
+            izquierda(lienzo, texto, ajustada, px, py);
+        }
+    }
+
+    private void dibujarImagen(PdfContentByte lienzo, float origenX, float origenY,
+                               CredencialProductor c, DisenoCredencial.Elemento e) {
+        float px = origenX + e.x();
+        float py = origenY + e.y();
+        Image imagen = imagen(bytesImagen(c, e.campo()), e.ancho(), e.alto());
+        if (imagen != null) {
+            imagen.setAbsolutePosition(px + (e.ancho() - imagen.getScaledWidth()) / 2f,
+                    py + (e.alto() - imagen.getScaledHeight()) / 2f);
+            agregar(lienzo, imagen);
+        } else if ("FOTO".equals(e.campo())) {
+            Font aviso = fuente(Math.min(5.5f, e.tamanoFuente()), Font.BOLD, Color.BLACK);
+            centrado(lienzo, "SIN FOTO", aviso, px + e.ancho() / 2f,
+                    py + e.alto() / 2f - 3f);
+        }
+    }
+
+    private void dibujarPie(PdfContentByte lienzo, float origenX, float origenY,
+                            CredencialProductor.Firmante firmante,
+                            DisenoCredencial.Elemento e) {
+        float x = origenX + e.x();
+        float y = origenY + e.y();
+        float ancho = e.ancho();
+        float alto = e.alto();
+        lienzo.setColorFill(Color.WHITE);
+        lienzo.rectangle(x, y, ancho, alto);
+        lienzo.fill();
         lienzo.setColorStroke(Color.BLACK);
         lienzo.setLineWidth(0.6f);
-        lienzo.moveTo(x, y + 92f);
-        lienzo.lineTo(x + ancho, y + 92f);
+        lienzo.moveTo(x, y + alto);
+        lienzo.lineTo(x + ancho, y + alto);
         lienzo.stroke();
 
-        centrado(lienzo, cargo, CARGO, x + ancho / 2f, y + 83f);
-
-        // El sello va inmediatamente debajo del cargo, no al fondo de la
-        // tarjeta: pegado a su firma se lee como un bloque, suelto abajo
-        // parecía de otra cosa.
-        Image sello = imagen(firmante == null ? null : firmante.sello(), ancho, 28f);
-        if (sello != null) {
-            sello.setAbsolutePosition(
-                    x + (ancho - sello.getScaledWidth()) / 2f, y + 50f);
-            agregar(lienzo, sello);
-        } else if (firmante != null) {
-            String nombre = firmante.nombre();
-            centrado(lienzo, nombre, ajustar(nombre, NOMBRE_FIRMANTE, ancho),
-                    x + ancho / 2f, y + 74f);
+        if (firmante == null) {
+            Font aviso = fuente(e.tamanoFuente(), Font.BOLD, color(e.color()));
+            centrado(lienzo, "SIN FIRMANTE", aviso, x + ancho / 2f, y + alto * .48f);
+            return;
         }
+        float factor = alto / 21f;
+        Font nombre = fuente(e.tamanoFuente(), Font.BOLD, color(e.color()));
+        Font cargo = fuente(Math.max(3f, e.tamanoFuente() - .2f), Font.BOLD, color(e.color()));
+        Font organizacion = fuente(Math.max(3f, e.tamanoFuente() - .4f), Font.NORMAL,
+                color(e.color()));
+        centrado(lienzo, firmante.nombre(),
+                ajustar(firmante.nombre(), nombre, ancho),
+                x + ancho / 2f, y + 15f * factor);
+        centrado(lienzo, firmante.cargo(),
+                ajustar(firmante.cargo(), cargo, ancho),
+                x + ancho / 2f, y + 10f * factor);
+        centrado(lienzo, firmante.organizacion(),
+                ajustar(firmante.organizacion(), organizacion, ancho),
+                x + ancho / 2f, y + 5f * factor);
+    }
+
+    private String valorCampo(CredencialProductor c, DisenoCredencial.Elemento e) {
+        String texto = switch (e.campo()) {
+            case "CODIGO_PADRON" -> c.codigoPadron();
+            case "NOMBRE_COMPLETO" -> unirNombre(c.nombres(), c.apellidos());
+            case "NOMBRES" -> c.nombres();
+            case "APELLIDOS" -> c.apellidos();
+            case "CI" -> c.ci();
+            case "SINDICATO" -> c.sindicato();
+            case "CENTRAL" -> c.central();
+            case "FEDERACION" -> sinPrefijoFederacion(c.federacion());
+            case "LOTES" -> c.lotes();
+            case "FECHA_EMISION" -> c.emitidaEl();
+            case "CODIGO_CREDENCIAL" -> c.codigo();
+            case "TEXTO_FIJO" -> e.texto();
+            default -> "";
+        };
+        return valor(texto);
+    }
+
+    private byte[] bytesImagen(CredencialProductor c, String campo) {
+        return switch (campo) {
+            case "FOTO" -> c.foto();
+            case "QR" -> c.qr();
+            case "SELLO_FEDERACION" -> c.selloFederacion();
+            case "SELLO_CENTRAL" -> c.selloCentral();
+            case "SELLO_SINDICATO" -> c.selloSindicato();
+            case "FIRMA_FEDERACION" -> firma(c.ejecutivoFederacion());
+            case "FIRMA_CENTRAL" -> firma(c.secretarioGeneralCentral());
+            case "FIRMA_SINDICATO" -> firma(c.secretarioGeneralSindicato());
+            default -> null;
+        };
+    }
+
+    private byte[] firma(CredencialProductor.Firmante firmante) {
+        return firmante == null ? null : firmante.firma();
+    }
+
+    private CredencialProductor.Firmante firmante(CredencialProductor c, String campo) {
+        return switch (campo) {
+            case "PIE_FEDERACION" -> c.ejecutivoFederacion();
+            case "PIE_CENTRAL" -> c.secretarioGeneralCentral();
+            case "PIE_SINDICATO" -> c.secretarioGeneralSindicato();
+            default -> null;
+        };
+    }
+
+    private void fondo(PdfContentByte lienzo, float x, float y, Image plantilla) {
+        Image fondo = Image.getInstance(plantilla);
+        fondo.scaleAbsolute(ANCHO, ALTO);
+        fondo.setAbsolutePosition(x, y);
+        agregar(lienzo, fondo);
+    }
+
+    private static Image cargarPlantilla(String recurso) {
+        try (InputStream entrada = CredencialProductorPdf.class.getResourceAsStream(recurso)) {
+            if (entrada == null) {
+                throw new IllegalStateException("No se encontró la plantilla " + recurso);
+            }
+            return Image.getInstance(entrada.readAllBytes());
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo leer la plantilla " + recurso, e);
+        }
+    }
+
+    private static String unirNombre(String nombres, String apellidos) {
+        String primero = nombres == null ? "" : nombres.trim();
+        String segundo = apellidos == null ? "" : apellidos.trim();
+        String completo = (primero + " " + segundo).trim();
+        return completo.isBlank() ? "—" : completo;
+    }
+
+    private static String sinPrefijoFederacion(String nombre) {
+        if (nombre == null) return null;
+        return nombre.replaceFirst("(?i)^FEDERACI[ÓO]N\\s+", "").trim();
+    }
+
+    private static String valor(String texto) {
+        return texto == null || texto.isBlank() ? "—" : texto.trim();
     }
 
     // -------------------------------------------------------- auxiliares
@@ -411,6 +459,19 @@ public class CredencialProductorPdf {
     private void izquierda(PdfContentByte lienzo, String texto, Font fuente, float x, float y) {
         ColumnText.showTextAligned(lienzo, Element.ALIGN_LEFT,
                 new Phrase(texto == null ? "" : texto, fuente), x, y, 0f);
+    }
+
+    private void derecha(PdfContentByte lienzo, String texto, Font fuente, float x, float y) {
+        ColumnText.showTextAligned(lienzo, Element.ALIGN_RIGHT,
+                new Phrase(texto == null ? "" : texto, fuente), x, y, 0f);
+    }
+
+    private Color color(String hexadecimal) {
+        try {
+            return Color.decode(hexadecimal == null ? "#000000" : hexadecimal);
+        } catch (NumberFormatException e) {
+            return Color.BLACK;
+        }
     }
 
     private static Font fuente(float tamano, int estilo, Color color) {

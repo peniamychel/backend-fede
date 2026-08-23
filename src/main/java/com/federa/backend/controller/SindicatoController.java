@@ -76,11 +76,11 @@ public class SindicatoController {
                     productor ordenada por apellido, y el acta de entrega con los tres bloques \
                     de firma al final.
 
-                    Los productores salen con su C.I., sus números de lote, su carnet de \
-                    productor y sus observaciones pendientes. Las resueltas no se imprimen: el \
-                    informe se entrega para corregir lo que falta.
+                    Los productores salen con su C.I., sus números de lote y su carnet de \
+                    productor. La columna de observaciones se imprime en blanco, para anotar \
+                    a mano sobre el papel.
 
-                    Si el sindicato tiene presidente vigente con la firma cargada, se estampa \
+                    Si el sindicato tiene Secretario General vigente con la firma cargada, se estampa \
                     en el bloque DIRIGENTE/ENTREGUE. Si no, ese espacio queda en blanco para \
                     firmar a mano.
 
@@ -109,10 +109,25 @@ public class SindicatoController {
                     voltear el papel por el lado largo cada reverso caiga detrás de su anverso. \
                     Si se imprime a una sola cara, las hojas pares se descartan.
 
-                    Devuelve 409 si el sindicato no tiene productores, o si tiene más de los que \
-                    admite un pliego.""")
+                    Devuelve 409 si el sindicato no tiene productores, si tiene más de los que \
+                    admite un pliego, o si a alguna credencial le faltan datos: el pliego se \
+                    imprime a doble cara y se recorta, así que una tarjeta incompleta en el \
+                    medio obliga a rehacer la hoja entera. Consultá `/credenciales/previa` para \
+                    ver a quiénes les falta qué.""")
     public ResponseEntity<byte[]> credenciales(@PathVariable Long id) {
         return ProductorController.comoAdjunto(credencialService.generarDeSindicato(id));
+    }
+
+    @GetMapping("/{id}/credenciales/previa")
+    @Operation(summary = "Vista previa del pliego: cuántas salen y a quiénes les falta algo",
+            description = """
+                    Separa lo que le falta al sindicato —que le falta a todas las credenciales \
+                    por igual, como la sigla de la central o la firma de un dirigente— de lo que \
+                    le falta a cada productor.
+
+                    Mientras `completa` sea false, la descarga del pliego va a devolver 409.""")
+    public CredencialService.PliegoPrevio previaDeCredenciales(@PathVariable Long id) {
+        return credencialService.previaDeSindicato(id);
     }
 
     @PutMapping("/{id}/ubicacion")

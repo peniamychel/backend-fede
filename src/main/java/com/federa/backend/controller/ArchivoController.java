@@ -82,7 +82,8 @@ public class ArchivoController {
         if (minuscula.endsWith(".gif")) {
             return MediaType.IMAGE_GIF;
         }
-        // Todo lo que guarda el procesador de imágenes sale como JPEG.
+        // Los archivos históricos siguen siendo JPEG; las fotografías,
+        // firmas y sellos nuevos usan PNG transparente.
         return MediaType.IMAGE_JPEG;
     }
 }

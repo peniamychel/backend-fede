@@ -7,15 +7,19 @@ import java.util.stream.Collectors;
  * Cargos del directorio.
  * <p>
  * Los comparten los tres niveles, pero no todos valen en todos: qué cargos
- * admite cada uno lo dice {@link Ambito}. Un sindicato tiene presidente y
- * secretario; una central suma haciendas; la federación suma además vocal.
+ * admite cada uno y en qué orden lo dice {@link Ambito}.
  */
 public enum TipoCargo {
 
-    PRESIDENTE("Presidente"),
-    SECRETARIO("Secretario"),
+    EJECUTIVO("Ejecutivo"),
+    SECRETARIO_GENERAL("Secretario General"),
+    SECRETARIO_RELACIONES("Secretario Relaciones"),
     HACIENDAS("Haciendas"),
-    VOCAL("Vocal");
+    VOCAL("Vocal"),
+
+    /** Valores históricos, conservados para poder migrar bases anteriores. */
+    @Deprecated PRESIDENTE("Presidente (histórico)"),
+    @Deprecated SECRETARIO("Secretario (histórico)");
 
     private final String etiqueta;
 
@@ -27,24 +31,18 @@ public enum TipoCargo {
         return etiqueta;
     }
 
-    /**
-     * Si este cargo puede tener firma y pie de firma cargados.
-     * <p>
-     * Solo presidente y secretario, en los tres niveles: son los que firman los
-     * documentos que emite la organización. Al resto no se le suben imágenes
-     * porque no las usa nadie.
-     */
-    public boolean puedeFirmar() {
+    public boolean esHistorico() {
         return this == PRESIDENTE || this == SECRETARIO;
     }
 
     public static TipoCargo desde(String valor) {
         for (TipoCargo c : values()) {
-            if (c.name().equalsIgnoreCase(valor)) {
+            if (!c.esHistorico() && c.name().equalsIgnoreCase(valor)) {
                 return c;
             }
         }
         throw new IllegalArgumentException("Cargo inválido: " + valor + ". Se espera "
-                + Arrays.stream(values()).map(Enum::name).collect(Collectors.joining(", ")) + ".");
+                + Arrays.stream(values()).filter(c -> !c.esHistorico())
+                .map(Enum::name).collect(Collectors.joining(", ")) + ".");
     }
 }

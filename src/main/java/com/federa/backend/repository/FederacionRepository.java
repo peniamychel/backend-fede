@@ -10,4 +10,7 @@ public interface FederacionRepository extends JpaRepository<Federacion, Long> {
     Optional<Federacion> findByNombreIgnoreCase(String nombre);
 
     boolean existsByNombreIgnoreCase(String nombre);
+
+    /** Para avisar del número repetido antes de que lo rechace la clave única. */
+    Optional<Federacion> findByNumero(String numero);
 }

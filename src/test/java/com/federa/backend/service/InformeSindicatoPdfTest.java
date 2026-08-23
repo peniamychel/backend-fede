@@ -42,8 +42,7 @@ class InformeSindicatoPdfTest {
                     "APELLIDO " + i,
                     "800000" + i,
                     String.valueOf(i),
-                    "CP" + i,
-                    i % 3 == 0 ? "FALTA FOTO" : ""));
+                    "CP" + i));
         }
         return new InformeSindicato("FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
                 filas, dirigente, 2026);
@@ -144,8 +143,7 @@ class InformeSindicatoPdfTest {
 
         assertThat(texto).contains("PRODUCTOR 1").contains("APELLIDO 1").contains("8000001");
         assertThat(texto).contains("PRODUCTOR 2").contains("CP2");
-        // La tercera es la única con observación: 3 % 3 == 0.
-        assertThat(texto).contains("PRODUCTOR 3").contains("FALTA FOTO");
+        assertThat(texto).contains("PRODUCTOR 3");
         assertThat(paginas(pdf)).isEqualTo(1);
     }
 
@@ -196,15 +194,17 @@ class InformeSindicatoPdfTest {
     }
 
     @Test
-    @DisplayName("con pie de firma cargado, la imagen reemplaza al nombre escrito")
+    @DisplayName("el pie de firma textual reemplaza al nombre automático")
     void presidenteConPieDeFirma() throws IOException {
         InformeSindicato.Dirigente dirigente = new InformeSindicato.Dirigente(
-                "JUAN MORALES", imagen(Color.BLUE), imagen(Color.RED));
+                "JUAN MORALES", imagen(Color.BLUE), "LIC. JUAN M.\nPRESIDENTE");
 
         byte[] pdf = generador.generar(informe(5, dirigente));
 
-        // El pie de firma ya dice quién firma; repetirlo en texto sobraría.
-        assertThat(textoCompleto(pdf)).doesNotContain("JUAN MORALES");
+        assertThat(textoCompleto(pdf))
+                .contains("LIC. JUAN M.")
+                .contains("PRESIDENTE")
+                .doesNotContain("JUAN MORALES");
         assertThat(pdf).isNotEmpty();
     }
 
@@ -235,7 +235,8 @@ class InformeSindicatoPdfTest {
     @DisplayName("deja un PDF de muestra en target/ para revisarlo a ojo")
     void muestraParaRevisar() throws IOException {
         InformeSindicato.Dirigente dirigente = new InformeSindicato.Dirigente(
-                "JUAN MORALES", imagen(new Color(40, 60, 160)), imagen(new Color(160, 40, 40)));
+                "JUAN MORALES", imagen(new Color(40, 60, 160)),
+                "JUAN MORALES\nPRESIDENTE");
 
         byte[] pdf = generador.generar(informe(47, dirigente));
 

@@ -1,20 +1,6 @@
 package com.federa.backend.dto;
 
-/**
- * Datos de una credencial, ya resueltos.
- * <p>
- * Igual que {@link InformeSindicato}, separa juntar los datos de dibujarlos:
- * el servicio consulta y el generador pinta. Así la credencial se puede probar
- * con datos inventados, sin base ni archivos.
- *
- * @param foto        miniatura del productor, o null si no tiene. Se usa la
- *                    miniatura y no el original porque en la tarjeta ocupa
- *                    menos de dos centímetros: el original solo agregaría peso.
- * @param presidente  presidente en funciones del sindicato, o null.
- * @param secretario  secretario en funciones del sindicato, o null.
- * @param emitidaEl   fecha de emisión ya formateada. Va impresa en el reverso:
- *                    una credencial sin fecha no deja saber si está al día.
- */
+/** Datos de una credencial de productor, ya resueltos para dibujar el PDF. */
 public record CredencialProductor(
         String federacion,
         String central,
@@ -22,26 +8,35 @@ public record CredencialProductor(
         String nombres,
         String apellidos,
         String ci,
-        String carnetProductor,
         String lotes,
         byte[] foto,
-        Firmante presidente,
-        Firmante secretario,
+        byte[] selloFederacion,
+        byte[] selloCentral,
+        byte[] selloSindicato,
+        Firmante ejecutivoFederacion,
+        Firmante secretarioGeneralCentral,
+        Firmante secretarioGeneralSindicato,
         String emitidaEl,
-
-        /** Codigo de la credencial, el que dice el QR. */
         String codigo,
-
-        /** PNG del QR ya dibujado. */
+        String codigoPadron,
         byte[] qr) {
 
-    /**
-     * Quien firma el reverso.
-     *
-     * @param firma JPEG de la firma, o null.
-     * @param sello JPEG del pie de firma, o null. Es lo que en la credencial
-     *              hace de sello: dice quién firmó y con qué cargo.
-     */
-    public record Firmante(String nombre, byte[] firma, byte[] sello) {
+    /** Constructor de compatibilidad para pruebas y consumidores anteriores. */
+    public CredencialProductor(String federacion, String central, String sindicato,
+                               String nombres, String apellidos, String ci, String lotes,
+                               byte[] foto, Firmante secretarioGeneral,
+                               Firmante secretarioRelaciones, String emitidaEl,
+                               String codigo, String codigoPadron, byte[] qr) {
+        this(federacion, central, sindicato, nombres, apellidos, ci, lotes, foto,
+                null, null, null, null, secretarioGeneral, secretarioRelaciones,
+                emitidaEl, codigo, codigoPadron, qr);
+    }
+
+    /** La firma y el pie automático que la identifica. */
+    public record Firmante(String nombre, String cargo, String organizacion, byte[] firma) {
+        /** Constructor anterior: el tercer archivo era un pie de firma en imagen. */
+        public Firmante(String nombre, byte[] firma, byte[] pieFirmaHistorico) {
+            this(nombre, "SECRETARIO GENERAL", "", firma);
+        }
     }
 }

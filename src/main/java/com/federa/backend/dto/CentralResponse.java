@@ -12,9 +12,9 @@ public record CentralResponse(
         @Schema(description = "Nombre normalizado.", example = "13 DE JUNIO")
         String nombre,
 
-        @Schema(description = "Número que le asigna la federación. Null si todavía no se cargó.",
-                example = "12")
-        String numero,
+        @Schema(description = "Sigla de tres letras, en mayúsculas. Null si todavía no se cargó.",
+                example = "IVI")
+        String abreviatura,
 
         @Schema(description = "Id de la federación.", example = "1")
         Long federacionId,
@@ -30,7 +30,7 @@ public record CentralResponse(
         return new CentralResponse(
                 central.getId(),
                 central.getNombre(),
-                central.getNumero(),
+                central.getAbreviatura(),
                 central.getFederacion().getId(),
                 central.getFederacion().getNombre(),
                 Auditoria.desde(central));

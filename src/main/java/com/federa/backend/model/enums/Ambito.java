@@ -1,37 +1,44 @@
 package com.federa.backend.model.enums;
 
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.Set;
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**
  * Nivel de la organización al que pertenece un cargo del directorio.
  * <p>
- * Cada nivel tiene su propio directorio y su propia lista de cargos. La lista
- * es acumulativa hacia arriba, que es como está organizada la federación: el
- * sindicato tiene lo mínimo y cada nivel superior suma responsabilidades.
+ * Cada nivel tiene su propio directorio, su lista de cargos y su orden.
  * <p>
  * De acá sale también de dónde salen los candidatos: del sindicato, de todos
  * los sindicatos de la central, o de toda la federación.
  */
 public enum Ambito {
 
-    SINDICATO("Sindicato", EnumSet.of(TipoCargo.PRESIDENTE, TipoCargo.SECRETARIO)),
+    SINDICATO("Sindicato", List.of(
+            TipoCargo.SECRETARIO_GENERAL,
+            TipoCargo.SECRETARIO_RELACIONES,
+            TipoCargo.HACIENDAS,
+            TipoCargo.VOCAL)),
 
-    CENTRAL("Central", EnumSet.of(TipoCargo.PRESIDENTE, TipoCargo.SECRETARIO,
-            TipoCargo.HACIENDAS)),
+    CENTRAL("Central", List.of(
+            TipoCargo.SECRETARIO_GENERAL,
+            TipoCargo.SECRETARIO_RELACIONES,
+            TipoCargo.HACIENDAS,
+            TipoCargo.VOCAL)),
 
-    FEDERACION("Federación", EnumSet.of(TipoCargo.PRESIDENTE, TipoCargo.SECRETARIO,
-            TipoCargo.HACIENDAS, TipoCargo.VOCAL));
+    FEDERACION("Federación", List.of(
+            TipoCargo.EJECUTIVO,
+            TipoCargo.SECRETARIO_GENERAL,
+            TipoCargo.SECRETARIO_RELACIONES,
+            TipoCargo.HACIENDAS,
+            TipoCargo.VOCAL));
 
     private final String etiqueta;
-    private final Set<TipoCargo> cargos;
+    private final List<TipoCargo> cargos;
 
-    Ambito(String etiqueta, Set<TipoCargo> cargos) {
+    Ambito(String etiqueta, List<TipoCargo> cargos) {
         this.etiqueta = etiqueta;
-        this.cargos = Collections.unmodifiableSet(cargos);
+        this.cargos = List.copyOf(cargos);
     }
 
     public String getEtiqueta() {
@@ -39,12 +46,20 @@ public enum Ambito {
     }
 
     /** Los cargos de este nivel, en el orden en que se muestran. */
-    public Set<TipoCargo> getCargos() {
+    public List<TipoCargo> getCargos() {
         return cargos;
     }
 
     public boolean admite(TipoCargo cargo) {
         return cargos.contains(cargo);
+    }
+
+    /** El cargo cuya firma aparece en el reverso de la credencial. */
+    public boolean puedeFirmar(TipoCargo cargo) {
+        return switch (this) {
+            case SINDICATO, CENTRAL -> cargo == TipoCargo.SECRETARIO_GENERAL;
+            case FEDERACION -> cargo == TipoCargo.EJECUTIVO;
+        };
     }
 
     public static Ambito desde(String valor) {

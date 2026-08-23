@@ -127,6 +127,7 @@ public class LoteService {
         if (request.productorId() != null) {
             Productor productor = productorService.buscar(request.productorId());
             verificarMismoSindicato(productor, lote);
+            verificarSinParcela(productor);
             tenenciaRepository.save(productor.tomarLote(lote, LocalDate.now()));
         }
 
@@ -195,6 +196,7 @@ public class LoteService {
         if (peticion.productorId() != null) {
             Productor productor = productorService.buscar(peticion.productorId());
             verificarMismoSindicato(productor, lote);
+            verificarSinParcela(productor);
 
             TenenciaLote nueva = productor.tomarLote(lote, desde);
             nueva.setMotivo(peticion.motivo());
@@ -267,6 +269,27 @@ public class LoteService {
         if (!productor.isEstado()) {
             throw new ReglaNegocioException(productor.getNombreCompleto()
                     + " está deshabilitado; habilitalo antes de darle un lote.");
+        }
+    }
+
+    /**
+     * Nadie puede tener dos parcelas a su nombre al mismo tiempo.
+     * <p>
+     * Es una regla del padrón, no una limitación técnica: la afiliación va
+     * atada a una parcela, y con dos la persona contaría dos veces en las
+     * nóminas y en los cupos. Quien compra otra parcela primero suelta la que
+     * tenía.
+     * <p>
+     * Se comprueba sobre las tenencias vigentes, no sobre el historial: haber
+     * tenido tierra antes no impide recibir otra hoy.
+     */
+    private void verificarSinParcela(Productor productor) {
+        long cuantas = tenenciaRepository.countByProductorIdAndVigenteIsTrue(productor.getId());
+        if (cuantas > 0) {
+            throw new ReglaNegocioException(String.format(
+                    "%s ya tiene una parcela a su nombre, y nadie puede tener dos. "
+                    + "Traspasá la que tiene antes de darle esta.",
+                    productor.getNombreCompleto()));
         }
     }
 

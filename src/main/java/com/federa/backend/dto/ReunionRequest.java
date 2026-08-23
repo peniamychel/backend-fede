@@ -42,6 +42,12 @@ public record ReunionRequest(
 
         @Schema(description = "Notas libres.", maxLength = 500)
         @Size(max = 500, message = "las observaciones no pueden superar los 500 caracteres")
-        String observaciones
+        String observaciones,
+
+        @Schema(description = "Si en esta reunión se pueden decidir vetos. No toda asamblea "
+                + "es para sancionar: la mayoría es informativa, y ofrecer el veto en todas "
+                + "invita a usarlo donde no corresponde. Por omisión, no.",
+                example = "false", defaultValue = "false")
+        Boolean vetosHabilitados
 ) {
 }

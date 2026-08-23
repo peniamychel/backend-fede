@@ -4,6 +4,7 @@ import com.federa.backend.almacen.AlmacenLocal;
 import com.federa.backend.model.ImagenProductor;
 import com.federa.backend.model.Productor;
 import com.federa.backend.model.enums.TipoImagen;
+import com.federa.backend.util.CodigoPadron;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.EnumMap;
@@ -28,10 +29,6 @@ public record ProductorResponse(
         @Schema(description = "Cédula de identidad. Puede ser null y puede repetirse.",
                 example = "913516")
         String ci,
-
-        @Schema(description = "Carné de productor. Puede ser null y puede repetirse.",
-                example = "1226")
-        String carnetProductor,
 
         @Schema(description = "Corrección de nombre pendiente de confirmar. Null si no hay.",
                 example = "CONSTANTINA")
@@ -77,6 +74,12 @@ public record ProductorResponse(
                 + "escribe a mano cuando la cámara no lee.", example = "AB12CD34EF")
         String codigo,
 
+        @Schema(description = "Código en el padrón: número de la federación, sigla de la "
+                + "central y número del productor dentro de esa central. Null mientras la "
+                + "federación no tenga número o la central no tenga sigla.",
+                example = "2-IVI-1")
+        String codigoPadron,
+
         Auditoria auditoria
 ) {
 
@@ -104,7 +107,6 @@ public record ProductorResponse(
                 p.getApellidos(),
                 p.getNombreCompleto(),
                 p.getCi(),
-                p.getCarnetProductor(),
                 p.getNombresCorregidos(),
                 p.getApellidosCorregidos(),
                 p.getFotoDescripcion(),
@@ -117,6 +119,7 @@ public record ProductorResponse(
                 imagenes.get(TipoImagen.MINIATURA),
                 imagenes.get(TipoImagen.ORIGINAL),
                 p.getCodigo(),
+                CodigoPadron.de(p),
                 Auditoria.desde(p));
     }
 }

@@ -17,7 +17,7 @@ import java.util.UUID;
 /**
  * Productor afiliado: fila del padrón (4.051 registros).
  * <p>
- * Mapea las columnas Nombres, Apellidos, C.I, Carnet Productor, FOTO,
+ * Mapea las columnas Nombres, Apellidos, C.I, FOTO,
  * Nombre x, Apellido x y Columna1.
  * <p>
  * Sobre la calidad del dato de origen (por eso casi todo es nullable y sin
@@ -26,12 +26,10 @@ import java.util.UUID;
  *   <li><b>C.I</b>: 3.927 de 4.051 filas la tienen, y hay 27 repetidas. Además
  *       26 valores no son numéricos ("8005906-1V", "2688288H5-P1"), por eso se
  *       guarda como texto y no como número.</li>
- *   <li><b>Carnet Productor</b>: solo 2.214 filas lo tienen, con 208 repetidos,
- *       y 10 valores son texto ("NUEVO").</li>
  *   <li><b>Apellidos</b>: faltan en 5 filas.</li>
  * </ul>
- * Ninguna de esas anomalías se bloquea con constraints: se registran como
- * {@link Observacion} para que la federación las depure desde el sistema.
+ * Ninguna de esas anomalías se bloquea con constraints: el padrón real entra
+ * como está y se depura después.
  */
 @Entity
 @Table(
@@ -39,7 +37,6 @@ import java.util.UUID;
         indexes = {
                 @Index(name = "idx_productor_sindicato", columnList = "sindicato_id"),
                 @Index(name = "idx_productor_ci", columnList = "ci"),
-                @Index(name = "idx_productor_carnet", columnList = "carnet_productor"),
                 @Index(name = "idx_productor_apellidos", columnList = "apellidos")
         }
 )
@@ -77,13 +74,28 @@ public class Productor extends EntidadAuditable {
     @Column(length = 16, unique = true)
     private String codigo;
 
+    /**
+     * Número del productor dentro de su central, empezando en 1.
+     * <p>
+     * Es la última parte del código del padrón —el "1" de {@code 2-IVI-1}— y lo
+     * único que hace falta guardar: el número de la federación y la sigla de la
+     * central se leen de ellas al armar el código. Guardar la cadena entera
+     * dejaría códigos viejos el día que una central cambie de sigla, y hoy
+     * ninguna la tiene puesta todavía.
+     * <p>
+     * No es el {@link #codigo} de la credencial. Ese es aleatorio y sirve para
+     * escanear; este se lee, se dicta y dice dónde está la persona.
+     * <p>
+     * Va aparejado a la central, así que si el productor se muda a otra se le da
+     * uno nuevo allá: el viejo pertenecía a la numeración de la central que
+     * dejó. Puede ser null en filas que todavía no pasaron por la migración.
+     */
+    @Column
+    private Integer correlativo;
+
     /** Columna "C.I". Texto: admite formatos con complemento ("8005906-1V"). */
     @Column(length = 20)
     private String ci;
-
-    /** Columna "Carnet Productor". Texto: admite el valor "NUEVO". */
-    @Column(name = "carnet_productor", length = 20)
-    private String carnetProductor;
 
     /**
      * Columna "Nombre x": nombre corregido propuesto durante la revisión del
@@ -136,11 +148,6 @@ public class Productor extends EntidadAuditable {
     @OneToMany(mappedBy = "productor", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<TenenciaLote> tenencias = new ArrayList<>();
 
-    @JsonIgnore
-    @Builder.Default
-    @OneToMany(mappedBy = "productor", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Observacion> observaciones = new ArrayList<>();
-
     /**
      * Miniatura y original, como máximo una de cada tipo. Va en cascada como
      * los lotes: borrar el productor tiene que llevarse sus imágenes, o quedan
@@ -162,6 +169,18 @@ public class Productor extends EntidadAuditable {
     @Builder.Default
     @OneToMany(mappedBy = "productor", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Cargo> cargos = new ArrayList<>();
+
+    /**
+     * Los vetos que le puso la asamblea, vigentes y levantados.
+     * <p>
+     * En cascada como el resto de lo suyo. Si la persona se borra del padrón,
+     * la sanción deja de tener a quién sancionar. Ojo: borrar es distinto de
+     * dar de baja —lo habitual— donde la ficha y sus vetos se quedan.
+     */
+    @JsonIgnore
+    @Builder.Default
+    @OneToMany(mappedBy = "productor", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Veto> vetos = new ArrayList<>();
 
     // Las fechas de alta y modificación ya no viven acá: las hereda de
     // EntidadAuditable, que las pone para todas las tablas por igual. Antes
@@ -214,8 +233,4 @@ public class Productor extends EntidadAuditable {
         return tenencia;
     }
 
-    public void agregarObservacion(Observacion observacion) {
-        observaciones.add(observacion);
-        observacion.setProductor(this);
-    }
 }

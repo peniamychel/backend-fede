@@ -1,11 +1,13 @@
 package com.federa.backend.dto;
 
+import com.federa.backend.model.HojaActa;
 import com.federa.backend.model.Reunion;
 import com.federa.backend.model.enums.Ambito;
 import com.federa.backend.model.enums.TipoReunion;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * Una reunión, con el recuento de la lista.
@@ -52,6 +54,22 @@ public record ReunionResponse(
         @Schema(description = "Cuántos se registraron.", example = "31")
         int presentes,
 
+        @Schema(description = "Si el acta ya está cargada. Sin ella no se pueden decidir "
+                + "vetos en esta reunión.", example = "true")
+        boolean tieneActa,
+
+        @Schema(description = "El número del acta en el libro del sindicato. Null mientras no "
+                + "haya acta. No es único: cada libro numera desde uno.",
+                example = "12/2026")
+        String codigoActa,
+
+        @Schema(description = "Si en esta reunión se pueden decidir vetos. No toda asamblea "
+                + "es para sancionar, así que se habilita a propósito.", example = "false")
+        boolean vetosHabilitados,
+
+        @Schema(description = "Las hojas del acta, en orden.")
+        List<HojaResponse> hojasActa,
+
         Auditoria auditoria
 ) {
 
@@ -71,6 +89,21 @@ public record ReunionResponse(
                 r.isCerrada(),
                 convocados,
                 presentes,
+                r.isTieneActa(),
+                r.getCodigoActa(),
+                r.isVetosHabilitados(),
+                r.getHojasActa().stream().map(HojaResponse::desde).toList(),
                 Auditoria.desde(r));
+    }
+
+    /** Una hoja del acta, sin el binario: los bytes se piden aparte. */
+    @Schema(description = "Una hoja del acta.")
+    public record HojaResponse(Long id, int orden, String nombre, String tipoMime,
+                               int tamanoBytes) {
+
+        static HojaResponse desde(HojaActa h) {
+            return new HojaResponse(h.getId(), h.getOrden(), h.getNombre(),
+                    h.getTipoMime(), h.getTamanoBytes());
+        }
     }
 }

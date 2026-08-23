@@ -30,11 +30,11 @@ import java.util.List;
                         name = "uk_central_federacion_nombre",
                         columnNames = {"federacion_id", "nombre"}
                 ),
-                // Único a secas, no por federación: el número lo asigna la
-                // federación y no se repite entre centrales. Que sea una clave
-                // de la base y no solo una comprobación en Java es lo que
-                // impide que dos altas simultáneas metan el mismo número.
-                @UniqueConstraint(name = "uk_central_numero", columnNames = "numero")
+                // Única a secas, no por federación: la sigla sirve para
+                // distinguir centrales entre sí y no se repite. Que sea una
+                // clave de la base y no solo una comprobación en Java es lo que
+                // impide que dos altas simultáneas metan la misma.
+                @UniqueConstraint(name = "uk_central_abreviatura", columnNames = "abreviatura")
         }
         // Sin índice aparte sobre federacion_id: la primera clave única ya
         // empieza por esa columna y sirve para buscar por federación.
@@ -54,19 +54,28 @@ public class Central extends EntidadAuditable {
     private String nombre;
 
     /**
-     * Número con el que la federación identifica a esta central.
+     * Sigla de tres caracteres con la que se abrevia a esta central.
      * <p>
-     * Opcional: casi ninguna lo tiene cargado todavía. Va como texto y no como
-     * entero por el mismo motivo que la C.I. del productor —el padrón real
-     * trae valores como "8005906-1V"—, y porque un número guardado como texto
-     * conserva los ceros a la izquierda si mañana los usan.
+     * Letras o números: varias centrales empiezan con un dígito, y la sigla de
+     * 1RO DE MAYO es 1MO.
      * <p>
-     * La unicidad la garantiza {@code uk_central_numero}. En MariaDB una clave
-     * única admite varios NULL, que es justo lo que hace falta acá: muchas
-     * centrales sin número, y a lo sumo una por cada número dado.
+     * Reemplaza al número que llevaba antes. Se escribe a mano y es opcional:
+     * todavía no están todas definidas.
+     * <p>
+     * Se guarda siempre en mayúsculas, y eso no es cosmética: la clave única
+     * compara como esté guardado, así que si una central quedara con "ivi" y
+     * otra con "IVI", la base las vería distintas y dejaría pasar las dos.
+     * <p>
+     * La unicidad la garantiza {@code uk_central_abreviatura}. En MariaDB una
+     * clave única admite varios NULL, que es justo lo que hace falta acá:
+     * muchas centrales sin sigla, y a lo sumo una por cada sigla dada.
      */
-    @Column(length = 20)
-    private String numero;
+    @Column(length = 3)
+    private String abreviatura;
+
+    /** Clave de la imagen del sello institucional en el almacén de objetos. */
+    @Column(name = "sello_clave", length = 200)
+    private String selloClave;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "federacion_id", nullable = false,

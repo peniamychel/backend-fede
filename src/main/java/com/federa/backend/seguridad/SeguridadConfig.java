@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -116,6 +117,12 @@ public class SeguridadConfig {
                 // corto en el parámetro, no exigir la cabecera.
                 .requestMatchers(HttpMethod.GET, ApiRutas.V1 + "/archivos/**").permitAll();
 
+        // Los respaldos contienen toda la base de datos. Se protegen incluso
+        // mientras el resto del padrón siga en el modo transitorio sin exigir
+        // autenticación global.
+        registro.requestMatchers(ApiRutas.V1 + "/administracion/backups/**")
+                .hasRole("ADMIN");
+
         if (exigirAutenticacion) {
             registro.anyRequest().authenticated();
         } else {
@@ -137,6 +144,7 @@ public class SeguridadConfig {
         config.setAllowedMethods(
                 List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
+        config.setExposedHeaders(List.of(HttpHeaders.CONTENT_DISPOSITION));
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource fuente = new UrlBasedCorsConfigurationSource();

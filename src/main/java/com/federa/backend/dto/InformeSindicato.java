@@ -30,9 +30,10 @@ public record InformeSindicato(
      * Una línea de la tabla. Todos los campos son texto ya formateado: el
      * generador no decide nada sobre el contenido, solo lo ubica.
      *
-     * @param numero        correlativo dentro del sindicato, arrancando en 1.
-     * @param lotes         números de lote unidos por coma, "" si no tiene.
-     * @param observaciones observaciones pendientes unidas por coma.
+     * @param numero       correlativo dentro del sindicato, arrancando en 1.
+     * @param lotes        números de lote unidos por coma, "" si no tiene.
+     * @param codigoPadron el código con el que se lo nombra, "" si todavía no
+     *                     se puede armar.
      */
     public record Fila(
             int numero,
@@ -40,8 +41,7 @@ public record InformeSindicato(
             String apellidos,
             String ci,
             String lotes,
-            String carnetProductor,
-            String observaciones) {
+            String codigoPadron) {
     }
 
     /**
@@ -53,8 +53,8 @@ public record InformeSindicato(
      *
      * @param nombre     nombre completo, para imprimirlo bajo la línea.
      * @param firma      JPEG de la firma, o null.
-     * @param pieDeFirma JPEG del pie de firma o sello, o null.
+     * @param pieDeFirma texto que se imprime debajo de la firma, o null.
      */
-    public record Dirigente(String nombre, byte[] firma, byte[] pieDeFirma) {
+    public record Dirigente(String nombre, byte[] firma, String pieDeFirma) {
     }
 }

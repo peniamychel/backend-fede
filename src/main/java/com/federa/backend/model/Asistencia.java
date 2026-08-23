@@ -17,9 +17,12 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "asistencias",
+        // Uno por persona y por vuelta de lista, no por reunión: quien está en
+        // la primera llamada y también en la segunda tiene dos registros, que
+        // es justamente lo que se quiere poder ver.
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_asistencia",
-                columnNames = {"reunion_id", "productor_id"}
+                columnNames = {"llamada_id", "productor_id"}
         ),
         indexes = @Index(name = "idx_asistencia_productor", columnList = "productor_id")
 )
@@ -33,9 +36,9 @@ public class Asistencia extends EntidadAuditable {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "reunion_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_asistencia_reunion"))
-    private Reunion reunion;
+    @JoinColumn(name = "llamada_id", nullable = false,
+            foreignKey = @ForeignKey(name = "fk_asistencia_llamada"))
+    private LlamadaLista llamada;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "productor_id", nullable = false,
@@ -46,8 +49,8 @@ public class Asistencia extends EntidadAuditable {
     @Column(name = "registrada_en", nullable = false)
     private LocalDateTime registradaEn;
 
-    public Asistencia(Reunion reunion, Productor productor) {
-        this.reunion = reunion;
+    public Asistencia(LlamadaLista llamada, Productor productor) {
+        this.llamada = llamada;
         this.productor = productor;
         this.registradaEn = LocalDateTime.now();
     }

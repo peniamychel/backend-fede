@@ -43,11 +43,6 @@ public record ImportacionResponse(
                 + "lote generan uno.", example = "3800")
         int lotes,
 
-        @Schema(description = "Observaciones creadas, o que se crearían. Una celda con varios "
-                + "motivos separados por coma produce una observación por motivo.",
-                example = "210")
-        int observaciones,
-
         @Schema(description = "Centrales que la planilla menciona y no existían.",
                 example = "[\"IVIRGARZAMA\", \"1RO MAYO\"]")
         List<String> centralesNuevas,

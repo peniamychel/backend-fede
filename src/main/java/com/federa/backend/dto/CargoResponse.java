@@ -20,7 +20,7 @@ public record CargoResponse(
         @Schema(description = "Identificador del período.", example = "7")
         Long id,
 
-        @Schema(description = "Qué cargo.", example = "PRESIDENTE")
+        @Schema(description = "Qué cargo.", example = "SECRETARIO_GENERAL")
         TipoCargo cargo,
 
         @Schema(description = "Id del productor que lo ocupa u ocupó.", example = "812")
@@ -52,10 +52,15 @@ public record CargoResponse(
         boolean vigente,
 
         @Schema(description = "URL de la firma de este período. Null si no se cargó.",
-                example = "/api/v1/archivos/firmas/a1b2c3d4e5f6-juan-morales.jpg")
+                example = "/api/v1/archivos/firmas/a1b2c3d4e5f6-juan-morales.png")
         String firmaUrl,
 
-        @Schema(description = "URL del pie de firma. Null si no se cargó.",
+        @Schema(description = "Pie automático: productor, cargo y organización.",
+                example = "JUAN MORALES\nSECRETARIO GENERAL\n1RO DE MAYO")
+        String pieFirma,
+
+        @Schema(description = "URL histórica del antiguo pie de firma en imagen. "
+                + "Solo se conserva para compatibilidad; ya no se cargan nuevas.",
                 example = "/api/v1/archivos/pies-firma/f6e5d4c3b2a1-juan-morales.jpg")
         String pieFirmaUrl
 ) {
@@ -86,6 +91,7 @@ public record CargoResponse(
                 cargo.getHasta(),
                 cargo.estaVigente(),
                 urls.get(TipoImagenCargo.FIRMA),
+                cargo.construirPieFirma(),
                 urls.get(TipoImagenCargo.PIE_FIRMA));
     }
 }

@@ -22,13 +22,16 @@ public class SindicatoService {
     private final SindicatoRepository sindicatoRepository;
     private final ProductorRepository productorRepository;
     private final CentralService centralService;
+    private final NumeradorPadron numerador;
 
     public SindicatoService(SindicatoRepository sindicatoRepository,
                             ProductorRepository productorRepository,
-                            CentralService centralService) {
+                            CentralService centralService,
+                            NumeradorPadron numerador) {
         this.sindicatoRepository = sindicatoRepository;
         this.productorRepository = productorRepository;
         this.centralService = centralService;
+        this.numerador = numerador;
     }
 
     public List<SindicatoResponse> listar(Long centralId) {
@@ -103,6 +106,10 @@ public class SindicatoService {
         verificarNombreLibre(central.getId(), nombre, id);
         verificarNumeroLibre(numero, id);
 
+        // Mudar el sindicato muda a toda su gente, y el número que llevaban
+        // pertenecía a la numeración de la central que dejan.
+        boolean cambioDeCentral = !central.getId().equals(sindicato.getCentral().getId());
+
         sindicato.setNombre(nombre);
         sindicato.setNumero(numero);
         sindicato.setCentral(central);
@@ -110,6 +117,9 @@ public class SindicatoService {
         // updatedAt recién al grabar, y sin esto la respuesta saldría con la
         // fecha vieja aunque la base quede bien.
         sindicatoRepository.flush();
+        if (cambioDeCentral) {
+            numerador.renumerar(sindicato.getId(), central.getId());
+        }
         return SindicatoResponse.desde(sindicato);
     }
 

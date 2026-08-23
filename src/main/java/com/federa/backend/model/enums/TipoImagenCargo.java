@@ -22,7 +22,7 @@ public enum TipoImagenCargo {
      */
     public static final int LADO_MAXIMO = 200;
 
-    /** Tope de peso. A 200 píxeles cualquier firma queda muy por debajo. */
+    /** Tope de peso del PNG. A 200 píxeles cualquier firma queda muy por debajo. */
     public static final int PESO_MAXIMO = 200 * 1024;
 
     private final String directorio;

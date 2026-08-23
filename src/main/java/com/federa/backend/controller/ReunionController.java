@@ -1,31 +1,31 @@
 package com.federa.backend.controller;
 
 import com.federa.backend.config.ApiRutas;
-import com.federa.backend.dto.ConvocadoResponse;
 import com.federa.backend.dto.EstadoRequest;
-import com.federa.backend.dto.RegistroAsistenciaResponse;
+import com.federa.backend.dto.LlamadaResponse;
+import com.federa.backend.dto.NotaRequest;
 import com.federa.backend.dto.ReunionRequest;
 import com.federa.backend.dto.ReunionResponse;
+import com.federa.backend.model.enums.TipoReunion;
 import com.federa.backend.service.ReunionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping(ApiRutas.V1 + "/reuniones")
 @Tag(name = "Reuniones", description =
         "Convocatorias y pase de lista. Hay cuatro tipos y cada uno llama a gente distinta: "
         + "la reunión de un sindicato a sus productores, el ampliado a los de toda la central, "
-        + "y las de dirigentes solo a presidentes y secretarios. La lista se pasa escaneando el "
+        + "y las de dirigentes solo a Secretarios Generales y Secretarios Relaciones. La lista se pasa escaneando el "
         + "QR de la credencial.")
 public class ReunionController {
 
@@ -37,35 +37,47 @@ public class ReunionController {
 
     @GetMapping
     @Operation(summary = "Lista las reuniones, de la más reciente a la más antigua",
-            description = "Los tres filtros son excluyentes: se pasa el del nivel que interesa.")
+            description = """
+                    Los tres filtros de nivel son excluyentes: se pasa el del nivel que \
+                    interesa.
+
+                    El `texto` busca por dos caminos, que son las dos formas en que alguien \
+                    busca una asamblea meses después: por **lo que fue** —título, lugar, notas \
+                    o número del acta— y por **a quién se vetó ahí** —su nombre, su cédula, \
+                    cualquiera de sus dos códigos, o el motivo escrito—. Cuenta tanto la \
+                    reunión que impuso el veto como la que lo levantó.""")
     public List<ReunionResponse> listar(
             @Parameter(description = "Solo las convocadas por este sindicato")
             @RequestParam(required = false) Long sindicatoId,
             @Parameter(description = "Solo las convocadas por esta central")
             @RequestParam(required = false) Long centralId,
             @Parameter(description = "Solo las convocadas por esta federación")
-            @RequestParam(required = false) Long federacionId) {
-        return reunionService.listar(sindicatoId, centralId, federacionId);
+            @RequestParam(required = false) Long federacionId,
+            @Parameter(description = "Solo las de este tipo", example = "AMPLIADO")
+            @RequestParam(required = false) TipoReunion tipo,
+            @Parameter(description = "Busca en el detalle de la reunión y en sus vetos",
+                    example = "cupo")
+            @RequestParam(required = false) String texto) {
+        return reunionService.listar(sindicatoId, centralId, federacionId, tipo, texto);
+    }
+
+    @GetMapping("/conteo")
+    @Operation(summary = "Cuántas reuniones hay de cada tipo",
+            description = "Con el mismo filtro que el listado pero sin el tipo: la solapa de "
+                    + "«Ampliado» tiene que decir cuántos ampliados hay aunque en ese momento "
+                    + "se esté mirando otra. Los tipos sin ninguna salen en cero.")
+    public Map<TipoReunion, Long> contar(
+            @RequestParam(required = false) Long sindicatoId,
+            @RequestParam(required = false) Long centralId,
+            @RequestParam(required = false) Long federacionId,
+            @RequestParam(required = false) String texto) {
+        return reunionService.contarPorTipo(sindicatoId, centralId, federacionId, texto);
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Una reunión, con cuántos convoca y cuántos van")
     public ReunionResponse obtener(@PathVariable Long id) {
         return reunionService.obtener(id);
-    }
-
-    @GetMapping("/{id}/lista")
-    @Operation(summary = "La lista de convocados, marcando quiénes ya llegaron",
-            description = """
-                    Sale ordenada por apellido, para poder buscar a alguien a ojo cuando el \
-                    carnet no aparece. Cada línea dice si está presente y a qué hora se \
-                    registró.
-
-                    Quiénes son convocados depende del tipo: los productores del sindicato, los \
-                    de toda la central en un ampliado, o solo los presidentes y secretarios en \
-                    las de dirigentes.""")
-    public List<ConvocadoResponse> lista(@PathVariable Long id) {
-        return reunionService.lista(id);
     }
 
     @PostMapping
@@ -83,43 +95,40 @@ public class ReunionController {
     @Operation(summary = "Corrige los datos de la reunión",
             description = "El tipo y quién convoca no se pueden cambiar: definen la lista de "
                     + "convocados, y cambiarlos con asistencias ya tomadas dejaría presentes a "
-                    + "gente que la nueva convocatoria no llama. Devuelve 409 si se intenta.")
+                    + "gente que la nueva convocatoria no llama. Devuelve 409 si se intenta, y "
+                    + "también si se apagan los vetos en una reunión que ya decidió alguno.")
     public ReunionResponse actualizar(@PathVariable Long id,
                                       @Valid @RequestBody ReunionRequest peticion) {
         return reunionService.actualizar(id, peticion);
     }
 
-    @PostMapping("/{id}/asistencias")
-    @Operation(summary = "Pasa lista: registra a alguien por el código de su credencial",
-            description = """
-                    Es lo que hace el escaneo del QR. También sirve escribiendo el código a \
-                    mano, que es el respaldo cuando la cámara no coopera.
-
-                    Escanear dos veces el mismo carnet devuelve 200 con resultado REPETIDO, no \
-                    un error: para quien está pasando lista frente a una fila de gente, "ya \
-                    estaba" es información, no un fallo.
-
-                    Devuelve 404 si ninguna credencial tiene ese código, y 409 si la persona no \
-                    está convocada a esta reunión o si la lista está cerrada.""")
-    public RegistroAsistenciaResponse registrar(
-            @PathVariable Long id,
-            @Valid @RequestBody CodigoRequest peticion) {
-        return reunionService.registrarPorCodigo(id, peticion.codigo());
+    @GetMapping("/{id}/llamadas")
+    @Operation(summary = "Las vueltas de lista de la reunión",
+            description = "En una asamblea se llama lista más de una vez: al empezar, más "
+                    + "tarde para los que llegaron tarde, y a veces al final. Cada vuelta "
+                    + "tiene su propia lista de presentes.")
+    public List<LlamadaResponse> llamadas(@PathVariable Long id) {
+        return reunionService.llamadasDe(id).stream()
+                .map(l -> LlamadaResponse.desde(l, reunionService.presentesEn(l.getId())))
+                .toList();
     }
 
-    @DeleteMapping("/{id}/asistencias/{productorId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Quita a alguien de la lista",
-            description = "Para cuando se escaneó el carnet equivocado.")
-    public void quitar(@PathVariable Long id, @PathVariable Long productorId) {
-        reunionService.quitarAsistencia(id, productorId);
+    @PostMapping("/{id}/llamadas")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Abre una vuelta de lista",
+            description = "Devuelve 409 si la lista de la reunión está cerrada, o si ya hay "
+                    + "otra vuelta abierta: primero se cierra esa.")
+    public LlamadaResponse abrirLlamada(@PathVariable Long id,
+                                        @RequestBody(required = false) NotaRequest peticion) {
+        var llamada = reunionService.abrirLlamada(id, peticion == null ? null : peticion.nota());
+        return LlamadaResponse.desde(llamada, 0);
     }
 
     @PatchMapping("/{id}/cierre")
-    @Operation(summary = "Cierra o reabre la lista",
-            description = "Una lista cerrada no admite más asistencias. Pasar lista es un acto "
-                    + "con un momento: si quedara abierta para siempre, alguien podría sumarse "
-                    + "una semana después y el acta diría que estuvo.")
+    @Operation(summary = "Cierra o reabre el pase de lista de la reunión",
+            description = "Con la lista cerrada ya no se pueden abrir más llamadas. Pasar "
+                    + "lista es un acto con un momento: si quedara abierto para siempre, "
+                    + "alguien podría sumarse una semana después y el acta diría que estuvo.")
     public ReunionResponse cambiarCierre(@PathVariable Long id,
                                          @Valid @RequestBody EstadoRequest peticion) {
         return reunionService.cambiarCierre(id, peticion.estado());
@@ -131,15 +140,5 @@ public class ReunionController {
             description = "Devuelve 409 si ya tiene asistencias: borrarla perdería la lista.")
     public void eliminar(@PathVariable Long id) {
         reunionService.eliminar(id);
-    }
-
-    /** Solo el código, que es lo que devuelve el lector de QR. */
-    @Schema(description = "Código de una credencial.")
-    public record CodigoRequest(
-            @Schema(description = "El texto que dice el QR, o el que se escribió a mano.",
-                    example = "AB12CD34EF", requiredMode = Schema.RequiredMode.REQUIRED)
-            @NotBlank(message = "hace falta el código de la credencial")
-            String codigo
-    ) {
     }
 }

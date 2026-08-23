@@ -12,6 +12,7 @@ import lombok.Setter;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Un productor ocupando un cargo del directorio de su sindicato, con las
@@ -56,7 +57,7 @@ public class Cargo extends EntidadAuditable {
     private Long id;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 12)
+    @Column(nullable = false, length = 24)
     private TipoCargo cargo;
 
     /**
@@ -116,8 +117,15 @@ public class Cargo extends EntidadAuditable {
     private Boolean vigente;
 
     /**
-     * Firma y pie de firma de este período. En cascada: si el período
-     * desaparece, sus imágenes no le sirven a nadie.
+     * Texto que se imprime debajo de la firma. Reemplaza a la antigua imagen
+     * de pie de firma y puede conservar la forma institucional exacta.
+     */
+    @Column(name = "pie_firma", length = 200)
+    private String pieFirma;
+
+    /**
+     * Firma de este período. La colección todavía admite los pies de firma
+     * históricos para no destruir archivos cargados antes del cambio a texto.
      */
     @Builder.Default
     @OneToMany(mappedBy = "cargo", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -165,6 +173,16 @@ public class Cargo extends EntidadAuditable {
             case CENTRAL -> central.getNombre();
             case FEDERACION -> federacion.getNombre();
         };
+    }
+
+    /**
+     * Pie que acompaña a la firma. Se deriva siempre de los datos vigentes
+     * para que no pueda quedar desactualizado ni dependa de una carga manual.
+     */
+    public String construirPieFirma() {
+        return productor.getNombreCompleto() + "\n"
+                + cargo.getEtiqueta().toUpperCase(Locale.ROOT) + "\n"
+                + getDuenoNombre();
     }
 
     /** Cierra el período. Es lo que se hace al reemplazar a alguien. */

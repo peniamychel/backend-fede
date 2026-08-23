@@ -1,5 +1,7 @@
 package com.federa.backend.service;
 
+import com.federa.backend.almacen.AlmacenObjetos;
+import com.federa.backend.almacen.TransaccionArchivos;
 import com.federa.backend.dto.ConvocadoResponse;
 import com.federa.backend.dto.RegistroAsistenciaResponse;
 import com.federa.backend.dto.ReunionRequest;
@@ -8,6 +10,7 @@ import com.federa.backend.exception.RecursoNoEncontradoException;
 import com.federa.backend.exception.ReglaNegocioException;
 import com.federa.backend.model.Asistencia;
 import com.federa.backend.model.Cargo;
+import com.federa.backend.model.LlamadaLista;
 import com.federa.backend.model.Productor;
 import com.federa.backend.model.Reunion;
 import com.federa.backend.model.enums.Ambito;
@@ -15,8 +18,10 @@ import com.federa.backend.model.enums.TipoCargo;
 import com.federa.backend.model.enums.TipoReunion;
 import com.federa.backend.repository.AsistenciaRepository;
 import com.federa.backend.repository.CargoRepository;
+import com.federa.backend.repository.LlamadaListaRepository;
 import com.federa.backend.repository.ProductorRepository;
 import com.federa.backend.repository.ReunionRepository;
+import com.federa.backend.repository.VetoRepository;
 import com.federa.backend.util.Textos;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,7 +46,7 @@ import java.util.Set;
  *   <li><b>Sindicato</b>: sus propios productores.</li>
  *   <li><b>Ampliado</b>: los productores de todos los sindicatos de la
  *       central.</li>
- *   <li><b>Dirigentes de la central</b>: presidentes y secretarios de sus
+ *   <li><b>Dirigentes de la central</b>: secretarios generales y de relaciones de sus
  *       sindicatos.</li>
  *   <li><b>Dirigentes de la federación</b>: los de las centrales y los de los
  *       sindicatos.</li>
@@ -55,10 +60,13 @@ public class ReunionService {
 
     /** Los dos cargos que se convocan a las reuniones de dirigentes. */
     private static final List<TipoCargo> DIRIGENCIA =
-            List.of(TipoCargo.PRESIDENTE, TipoCargo.SECRETARIO);
+            List.of(TipoCargo.SECRETARIO_GENERAL, TipoCargo.SECRETARIO_RELACIONES);
 
     private final ReunionRepository reunionRepository;
+    private final VetoRepository vetoRepository;
+    private final AlmacenObjetos almacen;
     private final AsistenciaRepository asistenciaRepository;
+    private final LlamadaListaRepository llamadaRepository;
     private final ProductorRepository productorRepository;
     private final CargoRepository cargoRepository;
     private final SindicatoService sindicatoService;
@@ -66,14 +74,20 @@ public class ReunionService {
     private final FederacionService federacionService;
 
     public ReunionService(ReunionRepository reunionRepository,
+                          VetoRepository vetoRepository,
+                          AlmacenObjetos almacen,
                           AsistenciaRepository asistenciaRepository,
+                          LlamadaListaRepository llamadaRepository,
                           ProductorRepository productorRepository,
                           CargoRepository cargoRepository,
                           SindicatoService sindicatoService,
                           CentralService centralService,
                           FederacionService federacionService) {
         this.reunionRepository = reunionRepository;
+        this.vetoRepository = vetoRepository;
+        this.almacen = almacen;
         this.asistenciaRepository = asistenciaRepository;
+        this.llamadaRepository = llamadaRepository;
         this.productorRepository = productorRepository;
         this.cargoRepository = cargoRepository;
         this.sindicatoService = sindicatoService;
@@ -83,10 +97,37 @@ public class ReunionService {
 
     // ------------------------------------------------------------ reuniones
 
-    public List<ReunionResponse> listar(Long sindicatoId, Long centralId, Long federacionId) {
-        return reunionRepository.filtrar(sindicatoId, centralId, federacionId).stream()
+    public List<ReunionResponse> listar(Long sindicatoId, Long centralId, Long federacionId,
+                                        TipoReunion tipo, String texto) {
+        return reunionRepository
+                .filtrar(sindicatoId, centralId, federacionId, tipo, Textos.limpiar(texto))
+                .stream()
                 .map(this::conRecuento)
                 .toList();
+    }
+
+    /**
+     * Cuántas reuniones hay de cada tipo, con el mismo filtro pero sin el tipo.
+     * <p>
+     * Es lo que va en las solapas. El tipo no entra en la cuenta a propósito:
+     * la solapa de «Ampliado» tiene que decir cuántos ampliados hay aunque en
+     * ese momento se esté mirando otra solapa, o el número cambiaría al tocarla
+     * y no serviría para decidir adónde ir.
+     * <p>
+     * Los tipos sin ninguna reunión salen en cero y no ausentes: una solapa que
+     * aparece y desaparece es más difícil de encontrar que una que dice cero.
+     */
+    public Map<TipoReunion, Long> contarPorTipo(Long sindicatoId, Long centralId,
+                                                Long federacionId, String texto) {
+        Map<TipoReunion, Long> cuenta = new LinkedHashMap<>();
+        for (TipoReunion t : TipoReunion.values()) {
+            cuenta.put(t, 0L);
+        }
+        for (TipoReunion t : reunionRepository.tiposQueCoinciden(
+                sindicatoId, centralId, federacionId, Textos.limpiar(texto))) {
+            cuenta.merge(t, 1L, Long::sum);
+        }
+        return cuenta;
     }
 
     public ReunionResponse obtener(Long id) {
@@ -119,30 +160,138 @@ public class ReunionService {
                     + "la lista de convocados y ya hay asistencias tomadas contra la actual. "
                     + "Creá otra reunión.");
         }
+        // Apagar los vetos con alguno ya decidido dejaría esa decisión colgando
+        // de una asamblea que, según el sistema, no podía tomarla. Cuenta las
+        // dos direcciones: haber levantado un veto también es haber decidido.
+        if (reunion.isVetosHabilitados() && !Boolean.TRUE.equals(peticion.vetosHabilitados())) {
+            long decididos = vetoRepository.decididosEn(id).size();
+            if (decididos > 0) {
+                throw new ReglaNegocioException(String.format(
+                        "En «%s» se decidieron %d veto(s). Apagar los vetos los dejaría sin la "
+                        + "asamblea que los respalda; para eso hay que levantarlos, en otra "
+                        + "reunión.", reunion.getTitulo(), decididos));
+            }
+        }
+
         aplicar(reunion, peticion);
         reunionRepository.flush();
         return conRecuento(reunion);
     }
 
-    /** Cierra o reabre la lista. */
+    /**
+     * Cierra o reabre el pase de lista de la reunión.
+     * <p>
+     * Al cerrarlo se cierra también la vuelta que haya quedado abierta: si no,
+     * la reunión diría que ya no se pasa lista mientras una llamada sigue
+     * admitiendo registros.
+     */
     @Transactional
     public ReunionResponse cambiarCierre(Long id, boolean cerrada) {
         Reunion reunion = buscar(id);
         reunion.setCerrada(cerrada);
+        if (cerrada) {
+            llamadaRepository.findByReunionIdAndAbiertaIsTrue(id)
+                    .ifPresent(abierta -> abierta.cerrar(java.time.LocalDateTime.now()));
+        }
         reunionRepository.flush();
         return conRecuento(reunion);
+    }
+
+    // ------------------------------------------------- las vueltas de lista
+
+    /**
+     * Abre una vuelta de lista.
+     * <p>
+     * En una asamblea se llama lista más de una vez: al empezar, más tarde para
+     * los que llegaron tarde, y a veces al final. Cada vuelta tiene su propia
+     * lista de presentes.
+     */
+    @Transactional
+    public LlamadaLista abrirLlamada(Long reunionId, String nota) {
+        Reunion reunion = buscar(reunionId);
+        if (reunion.isCerrada()) {
+            throw new ReglaNegocioException("La lista de «" + reunion.getTitulo()
+                    + "» está cerrada: ya no se pueden abrir más llamadas.");
+        }
+        llamadaRepository.findByReunionIdAndAbiertaIsTrue(reunionId).ifPresent(abierta -> {
+            throw new ReglaNegocioException("La " + ordinal(abierta.getNumero())
+                    + " llamada sigue abierta. Cerrala antes de abrir otra.");
+        });
+
+        LlamadaLista llamada = new LlamadaLista();
+        llamada.setReunion(reunion);
+        llamada.setNumero((int) llamadaRepository.countByReunionId(reunionId) + 1);
+        llamada.setNota(Textos.limpiar(nota));
+        llamada.setAbierta(true);
+        return llamadaRepository.saveAndFlush(llamada);
+    }
+
+    /** Cierra la vuelta: lo que se registre de acá en más va a la siguiente. */
+    @Transactional
+    public LlamadaLista cerrarLlamada(Long llamadaId) {
+        LlamadaLista llamada = buscarLlamada(llamadaId);
+        if (!llamada.isAbierta()) {
+            throw new ReglaNegocioException(
+                    "La " + ordinal(llamada.getNumero()) + " llamada ya estaba cerrada.");
+        }
+        llamada.cerrar(java.time.LocalDateTime.now());
+        return llamadaRepository.saveAndFlush(llamada);
+    }
+
+    public List<LlamadaLista> llamadasDe(Long reunionId) {
+        return llamadaRepository.findByReunionIdOrderByNumeroAsc(reunionId);
+    }
+
+    public long presentesEn(Long llamadaId) {
+        return asistenciaRepository.countByLlamadaId(llamadaId);
+    }
+
+    LlamadaLista buscarLlamada(Long id) {
+        return llamadaRepository.findById(id)
+                .orElseThrow(() -> new RecursoNoEncontradoException("llamada de lista", id));
+    }
+
+    /** "primera", "segunda"… para que los mensajes se lean como se habla. */
+    static String ordinal(int numero) {
+        return switch (numero) {
+            case 1 -> "primera";
+            case 2 -> "segunda";
+            case 3 -> "tercera";
+            case 4 -> "cuarta";
+            case 5 -> "quinta";
+            default -> numero + "ª";
+        };
     }
 
     @Transactional
     public void eliminar(Long id) {
         Reunion reunion = buscar(id);
-        long presentes = asistenciaRepository.countByReunionId(id);
+        long presentes = asistenciaRepository.countByLlamadaReunionId(id);
         if (presentes > 0) {
             throw new ReglaNegocioException("La reunión «" + reunion.getTitulo() + "» ya tiene "
                     + presentes + " asistencia(s) registrada(s). Borrarla perdería la lista; "
                     + "si no va más, deshabilitala.");
         }
+        // Una reunión que decidió un veto no se borra: el veto quedaría sin la
+        // asamblea que lo respalda, que es justamente lo que le da validez.
+        long decisiones = vetoRepository.findByReunionIdOrderByDesdeDesc(id).size()
+                + vetoRepository.findByReunionLevantaId(id).size();
+        if (decisiones > 0) {
+            throw new ReglaNegocioException("En la reunión «" + reunion.getTitulo() + "» se "
+                    + "decidieron " + decisiones + " veto(s). Borrarla dejaría esas decisiones "
+                    + "sin la asamblea que las respalda.");
+        }
+
+        // La fila se va con el delete, pero el archivo del acta no: el disco no
+        // sabe nada de JPA. Hay que leer su clave antes y quitarlo después de
+        // confirmar, o queda ocupando espacio para siempre sin que nadie sepa
+        // de qué reunión era.
+        List<String> actas = reunion.getHojasActa().stream()
+                .map(com.federa.backend.model.HojaActa::getClave).toList();
         reunionRepository.delete(reunion);
+        if (!actas.isEmpty()) {
+            TransaccionArchivos.alConfirmar(() -> actas.forEach(almacen::borrar));
+        }
     }
 
     // ------------------------------------------------------------- la lista
@@ -153,12 +302,13 @@ public class ReunionService {
      * Sale ordenada por apellido para poder buscar a alguien a ojo cuando el
      * carnet no aparece.
      */
-    public List<ConvocadoResponse> lista(Long reunionId) {
-        Reunion reunion = buscar(reunionId);
+    public List<ConvocadoResponse> lista(Long llamadaId) {
+        LlamadaLista llamada = buscarLlamada(llamadaId);
+        Reunion reunion = llamada.getReunion();
         Set<Long> presentes = new HashSet<>(
-                asistenciaRepository.findProductoresPresentes(reunionId));
+                asistenciaRepository.findProductoresPresentes(llamadaId));
         Map<Long, java.time.LocalDateTime> momentos = new LinkedHashMap<>();
-        for (Asistencia a : asistenciaRepository.findByReunionIdOrderByRegistradaEnAsc(reunionId)) {
+        for (Asistencia a : asistenciaRepository.findByLlamadaIdOrderByRegistradaEnAsc(llamadaId)) {
             momentos.put(a.getProductor().getId(), a.getRegistradaEn());
         }
 
@@ -182,11 +332,13 @@ public class ReunionService {
      * código inexistente, persona no convocada, o lista cerrada.
      */
     @Transactional
-    public RegistroAsistenciaResponse registrarPorCodigo(Long reunionId, String codigo) {
-        Reunion reunion = buscar(reunionId);
-        if (reunion.isCerrada()) {
-            throw new ReglaNegocioException("La lista de «" + reunion.getTitulo()
-                    + "» está cerrada. Reabrila si todavía hay que registrar gente.");
+    public RegistroAsistenciaResponse registrarPorCodigo(Long llamadaId, String codigo) {
+        LlamadaLista llamada = buscarLlamada(llamadaId);
+        Reunion reunion = llamada.getReunion();
+        Long reunionId = reunion.getId();
+        if (!llamada.isAbierta()) {
+            throw new ReglaNegocioException("La " + ordinal(llamada.getNumero())
+                    + " llamada ya se cerró. Abrí otra si todavía hay que registrar gente.");
         }
 
         String limpio = Textos.limpiar(codigo);
@@ -197,6 +349,19 @@ public class ReunionService {
                 .orElseThrow(() -> new RecursoNoEncontradoException(
                         "Ninguna credencial tiene el código " + limpio + "."));
 
+        // Quien está observado por la asamblea no participa: no cuenta para el
+        // quórum ni figura en el acta como presente. Se comprueba antes que la
+        // convocatoria porque es lo más importante que hay para decir de esa
+        // persona, y quien está pasando lista tiene que oírlo primero.
+        vetoRepository.findByProductorIdAndVigenteIsTrue(productor.getId())
+                .ifPresent(veto -> {
+                    throw new ReglaNegocioException(String.format(
+                            "%s está observado por la asamblea desde el %s (%s). Mientras el "
+                            + "veto siga, no participa de las reuniones ni cuenta para el "
+                            + "quórum.",
+                            productor.getNombreCompleto(), veto.getDesde(), veto.getMotivo()));
+                });
+
         List<Convocado> lista = convocados(reunion);
         Convocado convocado = lista.stream()
                 .filter(c -> c.productor().getId().equals(productor.getId()))
@@ -206,16 +371,16 @@ public class ReunionService {
                         productor.getNombreCompleto(), reunion.getTipo().getDetalle())));
 
         Optional<Asistencia> yaEstaba = asistenciaRepository
-                .findByReunionIdAndProductorId(reunionId, productor.getId());
+                .findByLlamadaIdAndProductorId(llamadaId, productor.getId());
         if (yaEstaba.isPresent()) {
             // No es un error: quien pasa lista escanea de nuevo por las dudas,
             // y necesita que se lo confirmen, no que se lo reproche.
             return respuesta(RegistroAsistenciaResponse.Resultado.REPETIDO,
-                    productor.getNombreCompleto() + " ya estaba registrado.",
+                    productor.getNombreCompleto() + " ya estaba en esta llamada.",
                     convocado, yaEstaba.get().getRegistradaEn(), reunionId, lista.size());
         }
 
-        Asistencia asistencia = new Asistencia(reunion, productor);
+        Asistencia asistencia = new Asistencia(llamada, productor);
         asistenciaRepository.saveAndFlush(asistencia);
 
         return respuesta(RegistroAsistenciaResponse.Resultado.REGISTRADO,
@@ -225,11 +390,11 @@ public class ReunionService {
 
     /** Da de baja una asistencia, para cuando se escaneó al que no era. */
     @Transactional
-    public void quitarAsistencia(Long reunionId, Long productorId) {
+    public void quitarAsistencia(Long llamadaId, Long productorId) {
         Asistencia asistencia = asistenciaRepository
-                .findByReunionIdAndProductorId(reunionId, productorId)
+                .findByLlamadaIdAndProductorId(llamadaId, productorId)
                 .orElseThrow(() -> new RecursoNoEncontradoException(
-                        "Esa persona no figura como presente en la reunión."));
+                        "Esa persona no figura como presente en esta vuelta de lista."));
         asistenciaRepository.delete(asistencia);
     }
 
@@ -244,29 +409,47 @@ public class ReunionService {
      */
     private List<Convocado> convocados(Reunion reunion) {
         Long id = reunion.getConvocanteId();
+        Set<Long> observados = observados();
 
         return switch (reunion.getTipo()) {
             case SINDICATO -> deProductores(productorRepository
-                    .findBySindicatoIdOrderByApellidosAscNombresAsc(id));
+                    .findBySindicatoIdOrderByApellidosAscNombresAsc(id), observados);
 
             case AMPLIADO -> deProductores(productorRepository
-                    .findBySindicatoCentralIdOrderByApellidosAscNombresAsc(id));
+                    .findBySindicatoCentralIdOrderByApellidosAscNombresAsc(id), observados);
 
             case DIRIGENTES_CENTRAL -> deCargos(
-                    cargoRepository.findDirigentesDeSindicatosDeCentral(id, DIRIGENCIA));
+                    cargoRepository.findDirigentesDeSindicatosDeCentral(id, DIRIGENCIA),
+                    observados);
 
             case DIRIGENTES_FEDERACION -> deCargos(
-                    cargoRepository.findDirigentesDeFederacion(id, DIRIGENCIA));
+                    cargoRepository.findDirigentesDeFederacion(id, DIRIGENCIA), observados);
         };
     }
 
     /**
-     * Convocados por ser afiliados. Se dejan fuera los deshabilitados: alguien
-     * dado de baja no cuenta para el quórum.
+     * Quiénes están vetados hoy, en todo el padrón.
+     * <p>
+     * Se traen todos de una vez y no de a uno por convocado: en un ampliado de
+     * central serían cientos de consultas, y los vetados vigentes son un puñado.
      */
-    private List<Convocado> deProductores(List<Productor> productores) {
+    private Set<Long> observados() {
+        return vetoRepository.buscar(null, null, true).stream()
+                .map(v -> v.getProductor().getId())
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    /**
+     * Convocados por ser afiliados.
+     * <p>
+     * Se dejan fuera dos grupos, por la misma razón: no cuentan para el quórum.
+     * Los deshabilitados, que ya no son del padrón, y los observados por la
+     * asamblea, que están suspendidos de sus derechos mientras dure el veto.
+     */
+    private List<Convocado> deProductores(List<Productor> productores, Set<Long> observados) {
         return productores.stream()
                 .filter(Productor::isEstado)
+                .filter(p -> !observados.contains(p.getId()))
                 .map(p -> new Convocado(p, null))
                 .toList();
     }
@@ -278,11 +461,11 @@ public class ReunionService {
      * por sindicato y cargo, que es útil para leer el directorio pero no para
      * buscar a una persona en una lista de asistencia.
      */
-    private List<Convocado> deCargos(List<Cargo> cargos) {
+    private List<Convocado> deCargos(List<Cargo> cargos, Set<Long> observados) {
         List<Convocado> lista = new ArrayList<>();
         for (Cargo c : cargos) {
             Productor p = c.getProductor();
-            if (!p.isEstado()) {
+            if (!p.isEstado() || observados.contains(p.getId())) {
                 continue;
             }
             lista.add(new Convocado(p, c.getCargo().getEtiqueta() + " de "
@@ -300,6 +483,7 @@ public class ReunionService {
         reunion.setFecha(peticion.fecha());
         reunion.setLugar(Textos.limpiar(peticion.lugar()));
         reunion.setObservaciones(Textos.limpiar(peticion.observaciones()));
+        reunion.setVetosHabilitados(Boolean.TRUE.equals(peticion.vetosHabilitados()));
     }
 
     /**
@@ -322,7 +506,7 @@ public class ReunionService {
     private ReunionResponse conRecuento(Reunion reunion) {
         return ReunionResponse.desde(reunion,
                 convocados(reunion).size(),
-                (int) asistenciaRepository.countByReunionId(reunion.getId()));
+                asistenciaRepository.findProductoresPresentesEnLaReunion(reunion.getId()).size());
     }
 
     private RegistroAsistenciaResponse respuesta(
@@ -336,7 +520,7 @@ public class ReunionService {
                 new ConvocadoResponse(p.getId(), p.getNombreCompleto(),
                         Textos.limpiar(p.getCi()), p.getSindicato().getNombre(),
                         convocado.motivo(), true, momento),
-                (int) asistenciaRepository.countByReunionId(reunionId),
+                asistenciaRepository.findProductoresPresentesEnLaReunion(reunionId).size(),
                 convocados);
     }
 

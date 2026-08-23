@@ -9,11 +9,11 @@ package com.federa.backend.model.enums;
  */
 public enum TipoImagen {
 
-    /** Versión chica para listados. Lado mayor acotado, pesa unos pocos KB. */
-    MINIATURA("miniaturas", 320, 200 * 1024),
+    /** Versión chica para listados; transparente y casi imperceptible al descargar. */
+    MINIATURA("miniaturas", 128, 30 * 1024),
 
-    /** La foto, ya reducida y comprimida para no ocupar de más. */
-    ORIGINAL("originales", 1600, 512 * 1024);
+    /** Foto cuadrada sin fondo, suficiente para la credencial y de hasta 300 KB. */
+    ORIGINAL("originales", 600, 300 * 1024);
 
     private final String directorio;
     private final int ladoMaximo;

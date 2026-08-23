@@ -12,11 +12,15 @@ public record FederacionResponse(
         @Schema(description = "Nombre normalizado.", example = "FEDERA")
         String nombre,
 
+        @Schema(description = "Número que la identifica. Null si todavía no se cargó.",
+                example = "3")
+        String numero,
+
         Auditoria auditoria
 ) {
 
     public static FederacionResponse desde(Federacion federacion) {
         return new FederacionResponse(federacion.getId(), federacion.getNombre(),
-                Auditoria.desde(federacion));
+                federacion.getNumero(), Auditoria.desde(federacion));
     }
 }

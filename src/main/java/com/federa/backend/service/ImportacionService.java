@@ -6,7 +6,6 @@ import com.federa.backend.dto.SindicatoNuevo;
 import com.federa.backend.model.Central;
 import com.federa.backend.model.Federacion;
 import com.federa.backend.model.Lote;
-import com.federa.backend.model.Observacion;
 import com.federa.backend.model.Productor;
 import com.federa.backend.model.Sindicato;
 import com.federa.backend.repository.CentralRepository;
@@ -46,7 +45,6 @@ public class ImportacionService {
     private static final int MAX_NOMBRE = 60;
     private static final int MAX_CI = 20;
     private static final int MAX_LOTE = 20;
-    private static final int MAX_OBSERVACION = 500;
 
     private final LectorPlanilla lector;
     private final FederacionService federacionService;
@@ -54,6 +52,7 @@ public class ImportacionService {
     private final SindicatoRepository sindicatoRepository;
     private final ProductorRepository productorRepository;
     private final LoteRepository loteRepository;
+    private final NumeradorPadron numerador;
     private final TransactionTemplate transacciones;
 
     public ImportacionService(LectorPlanilla lector,
@@ -62,6 +61,7 @@ public class ImportacionService {
                               SindicatoRepository sindicatoRepository,
                               ProductorRepository productorRepository,
                               LoteRepository loteRepository,
+                              NumeradorPadron numerador,
                               PlatformTransactionManager gestorTransacciones) {
         this.lector = lector;
         this.federacionService = federacionService;
@@ -69,6 +69,7 @@ public class ImportacionService {
         this.sindicatoRepository = sindicatoRepository;
         this.productorRepository = productorRepository;
         this.loteRepository = loteRepository;
+        this.numerador = numerador;
         this.transacciones = new TransactionTemplate(gestorTransacciones);
     }
 
@@ -125,6 +126,14 @@ public class ImportacionService {
         /** Identidades ya existentes, para detectar una segunda carga de la misma planilla. */
         private final Set<String> yaExistentes = new HashSet<>();
 
+        /** Por central, el número que le toca al próximo productor. */
+        private final Map<Long, Integer> proximoNumero = new HashMap<>();
+
+        /**
+         * Quién se queda con qué lote, para armarlo cuando los dos existan.
+         */
+        private final List<Entrega> porEntregar = new ArrayList<>();
+
         private final Set<String> centralesNuevas = new LinkedHashSet<>();
         private final Map<String, SindicatoNuevo> sindicatosNuevos = new LinkedHashMap<>();
         private final List<ErrorFila> errores = new ArrayList<>();
@@ -139,7 +148,6 @@ public class ImportacionService {
         private int erroresTotales;
         private int filasLeidas;
         private int lotes;
-        private int observaciones;
         private int posiblesDuplicados;
 
         private Proceso(Long federacionId, boolean crearJerarquia) {
@@ -252,6 +260,7 @@ public class ImportacionService {
             productor.setApellidos(apellidos);
             productor.setCi(ci);
             productor.setSindicato(sindicato);
+            productor.setCorrelativo(numerarEn(central));
 
             if (numeroLote != null) {
                 // El lote se da de alta en el sindicato —ahí está la tierra— y
@@ -259,21 +268,21 @@ public class ImportacionService {
                 // fecha de inicio es hoy: la planilla no dice desde cuándo lo
                 // tiene, y inventarla sería peor que dejar constancia de que el
                 // período empieza cuando se cargó.
+                //
+                // La tenencia no se arma todavía: engancha al productor con el
+                // lote, y los dos están sin guardar. Queda anotada y se arma en
+                // guardar(), cuando las dos puntas ya existen en la base.
                 Lote lote = new Lote();
                 lote.setNumero(numeroLote);
                 lote.setSindicato(sindicato);
                 nuevosLotes.add(lote);
-                productor.tomarLote(lote, LocalDate.now());
+                porEntregar.add(new Entrega(productor, lote));
                 lotes++;
             }
 
-            for (String mensaje : motivos(fila.observaciones())) {
-                Observacion observacion = new Observacion();
-                observacion.setMensaje(mensaje);
-                productor.agregarObservacion(observacion);
-                observaciones++;
-            }
-
+            // La columna «Observaciones» de la planilla se sigue leyendo para no
+            // romper el formato del archivo real, pero ya no se guarda: la
+            // bandeja de observaciones salió del sistema.
             if (yaExistentes.contains(claveIdentidad(sindicato.getId(), nombres, apellidos))) {
                 posiblesDuplicados++;
             }
@@ -282,34 +291,40 @@ public class ImportacionService {
         }
 
         /**
-         * Una celda de observaciones puede juntar varios motivos separados por
-         * coma. El modelo guarda cada motivo como una fila propia, para poder
-         * resolverlos de a uno.
+         * El número que le toca dentro de su central, y anota el que sigue.
+         * <p>
+         * La cuenta se lleva en memoria y no consultando el máximo por cada
+         * fila: los productores de esta corrida todavía no están escritos, así
+         * que la base seguiría devolviendo el mismo máximo y las cuatrocientas
+         * filas saldrían con el mismo número.
+         * <p>
+         * Arranca donde quedó la central —en una vacía, en 1— para que importar
+         * dos planillas seguidas continúe la serie en vez de pisarla.
          */
-        private List<String> motivos(String celda) {
-            String texto = Textos.limpiar(celda);
-            if (texto == null) {
-                return List.of();
-            }
-            List<String> lista = new ArrayList<>();
-            for (String parte : texto.split(",")) {
-                String motivo = Textos.limpiar(parte);
-                if (motivo == null) {
-                    continue;
-                }
-                lista.add(motivo.length() > MAX_OBSERVACION
-                        ? motivo.substring(0, MAX_OBSERVACION)
-                        : motivo);
-            }
-            return lista;
+        private int numerarEn(Central central) {
+            int numero = proximoNumero.computeIfAbsent(central.getId(),
+                    id -> numerador.siguiente(id));
+            proximoNumero.put(central.getId(), NumeradorPadron.despuesDe(numero));
+            return numero;
         }
 
         private void guardar() {
-            // Los lotes primero: la tenencia los referencia, y una referencia a
-            // una fila que todavía no existe no se puede insertar. El productor
-            // arrastra sus tenencias por cascada, así que con este orden alcanza.
+            // Las dos puntas antes que el nudo. La tenencia referencia al lote
+            // y al productor, los dos con NOT NULL, así que hasta que las dos
+            // filas existan no se puede insertar.
+            //
+            // Y las tenencias se arman recién ahora, no al leer la fila: como
+            // `Lote` propaga en cascada a sus tenencias, guardar un lote que ya
+            // tuviera una colgando intentaba escribir una tenencia que apunta a
+            // un productor todavía sin guardar, y Hibernate lo rechazaba.
             loteRepository.saveAll(nuevosLotes);
             productorRepository.saveAll(aGuardar);
+
+            LocalDate hoy = LocalDate.now();
+            for (Entrega entrega : porEntregar) {
+                entrega.productor().tomarLote(entrega.lote(), hoy);
+            }
+
             // Fuerza los INSERT ahora: si alguna restricción de la base se
             // rompe, que falle acá dentro de la transacción y no al confirmar,
             // cuando ya no se puede informar bien.
@@ -334,7 +349,6 @@ public class ImportacionService {
                     erroresTotales,
                     aGuardar.size(),
                     lotes,
-                    observaciones,
                     List.copyOf(centralesNuevas),
                     List.copyOf(sindicatosNuevos.values()),
                     posiblesDuplicados,
@@ -354,5 +368,9 @@ public class ImportacionService {
         private String claveIdentidad(Long sindicatoId, String nombres, String apellidos) {
             return sindicatoId + "|" + nombres + "|" + (apellidos == null ? "" : apellidos);
         }
+    }
+
+    /** Un productor de la planilla y el lote que la planilla le pone. */
+    private record Entrega(Productor productor, Lote lote) {
     }
 }

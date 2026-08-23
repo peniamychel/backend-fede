@@ -2,6 +2,7 @@ package com.federa.backend.controller;
 
 import com.federa.backend.config.ApiRutas;
 import com.federa.backend.dto.CargoResponse;
+import com.federa.backend.dto.CredencialPrevia;
 import com.federa.backend.dto.EstadoRequest;
 import com.federa.backend.dto.ProductorDetalleResponse;
 import com.federa.backend.dto.ProductorRequest;
@@ -30,7 +31,7 @@ import java.util.List;
 @RequestMapping(ApiRutas.V1 + "/productores")
 @Tag(name = "Productores", description =
         "Productor afiliado: una fila del padrón. Solo los nombres y el sindicato son "
-        + "obligatorios; cédula, carné y apellidos pueden faltar porque faltan en el padrón real.")
+        + "obligatorios; cédula y apellidos pueden faltar porque faltan en el padrón real.")
 public class ProductorController {
 
     private final ProductorService productorService;
@@ -53,7 +54,7 @@ public class ProductorController {
     public PagedModel<ProductorResponse> listar(
             @Parameter(description = "Acota a un sindicato") @RequestParam(required = false) Long sindicatoId,
             @Parameter(description = "Acota a una central") @RequestParam(required = false) Long centralId,
-            @Parameter(description = "Busca en nombres, apellidos, cédula y carné de productor")
+            @Parameter(description = "Busca en nombres, apellidos y cédula")
             @RequestParam(required = false) String texto,
             @PageableDefault(size = 25, sort = {"apellidos", "nombres"}, direction = Sort.Direction.ASC)
             Pageable pageable) {
@@ -76,26 +77,14 @@ public class ProductorController {
         return productorService.cedulasDuplicadas();
     }
 
-    @GetMapping("/duplicados/carnets")
-    @Operation(summary = "Carnés de productor asignados a más de una persona")
-    public List<String> carnetsDuplicados() {
-        return productorService.carnetsDuplicados();
-    }
-
     @GetMapping("/por-cedula/{ci}")
     @Operation(summary = "Productores que comparten una cédula")
     public List<ProductorResponse> porCedula(@PathVariable String ci) {
         return productorService.porCedula(ci);
     }
 
-    @GetMapping("/por-carnet/{carnet}")
-    @Operation(summary = "Productores que comparten un carné")
-    public List<ProductorResponse> porCarnet(@PathVariable String carnet) {
-        return productorService.porCarnet(carnet);
-    }
-
     @GetMapping("/{id}")
-    @Operation(summary = "Ficha completa: datos del productor, sus lotes y sus observaciones")
+    @Operation(summary = "Ficha completa: datos del productor, sus lotes y sus imágenes")
     public ProductorDetalleResponse obtener(@PathVariable Long id) {
         return productorService.obtener(id);
     }
@@ -104,16 +93,31 @@ public class ProductorController {
     @Operation(summary = "Descarga la credencial del productor",
             description = """
                     Dos páginas del tamaño exacto de una cédula (85,6 × 54 mm, apaisada): el \
-                    anverso con la foto y los datos, y el reverso con las firmas del presidente \
-                    y del secretario del sindicato.
+                    anverso con la foto y los datos, y el reverso con las firmas del Secretario \
+                    General y del Secretario Relaciones del sindicato.
 
                     Sirve para una impresora de tarjetas y también para imprimir a doble cara \
                     en tamaño real y recortar por el contorno.
 
-                    Lo que falte sale en blanco en vez de impedir la emisión: sin foto queda el \
-                    recuadro vacío, y sin firma cargada queda el espacio para firmar a mano.""")
+                    Exige que los datos estén completos. Si falta la foto, la cédula, la sigla \
+                    de la central o la firma de alguno de los dos cargos que firman, responde \
+                    409 diciendo qué falta en vez de emitir una tarjeta a medias: una credencial \
+                    sale plastificada y se reparte, y rehacerla cuesta más que completarla \
+                    antes. Consultá `/credencial/previa` para verlo con detalle.""")
     public ResponseEntity<byte[]> credencial(@PathVariable Long id) {
         return comoAdjunto(credencialService.generar(id));
+    }
+
+    @GetMapping("/{id}/credencial/previa")
+    @Operation(summary = "Vista previa de la credencial, con lo que falta para emitirla",
+            description = """
+                    Los mismos datos que van a salir impresos, leídos igual que los lee el \
+                    generador, más la lista de lo que falta.
+
+                    Mientras `completa` sea false, la descarga del PDF va a devolver 409. Cada \
+                    faltante dice qué es y en qué pantalla se carga.""")
+    public CredencialPrevia previaDeCredencial(@PathVariable Long id) {
+        return credencialService.previa(id);
     }
 
     static ResponseEntity<byte[]> comoAdjunto(CredencialService.Descarga descarga) {
@@ -170,7 +174,8 @@ public class ProductorController {
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Elimina un productor",
-            description = "Arrastra en cascada sus lotes y observaciones, que son datos propios de él.")
+            description = "Arrastra en cascada sus imágenes y sus períodos de tenencia. Sus "
+                    + "lotes no: la tierra pertenece al sindicato y se queda ahí.")
     public void eliminar(@PathVariable Long id) {
         productorService.eliminar(id);
     }

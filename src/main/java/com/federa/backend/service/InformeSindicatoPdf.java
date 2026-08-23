@@ -67,7 +67,7 @@ public class InformeSindicatoPdf {
      */
     private static final String[] COLUMNAS = {
             "N°", "NOMBRE COMPLETO", "APELLIDOS", "C.I.",
-            "N° LOTE", "N° C. PRODUCTOR", "OBSERVACIONES"};
+            "N° LOTE", "CÓDIGO", "OBSERVACIONES"};
     private static final float[] ANCHOS = {26f, 108f, 140f, 66f, 52f, 70f, 270f};
 
     /**
@@ -133,8 +133,14 @@ public class InformeSindicatoPdf {
             tabla.addCell(dato(fila.apellidos(), Element.ALIGN_LEFT));
             tabla.addCell(dato(fila.ci(), Element.ALIGN_LEFT));
             tabla.addCell(dato(fila.lotes(), Element.ALIGN_CENTER));
-            tabla.addCell(dato(fila.carnetProductor(), Element.ALIGN_CENTER));
-            tabla.addCell(dato(fila.observaciones(), Element.ALIGN_LEFT));
+            // Donde antes iba el carné de productor. La columna se conserva
+            // porque una nómina necesita identificar a cada uno con algo corto;
+            // lo que cambió es con qué.
+            tabla.addCell(dato(fila.codigoPadron(), Element.ALIGN_CENTER));
+            // La columna queda en blanco a propósito. El sistema ya no guarda
+            // observaciones, pero la nómina se imprime y se reparte en papel, y
+            // ahí el espacio para anotar a mano es justamente para lo que sirve.
+            tabla.addCell(dato("", Element.ALIGN_LEFT));
         }
         return tabla;
     }
@@ -235,14 +241,12 @@ public class InformeSindicatoPdf {
         debajo.setBorder(Rectangle.NO_BORDER);
         debajo.setHorizontalAlignment(Element.ALIGN_CENTER);
         debajo.setPaddingTop(3f);
-        Image pie = imagen(dirigente == null ? null : dirigente.pieDeFirma(), 150f, 34f);
-        if (pie != null) {
-            debajo.addElement(pie);
-        } else if (dirigente != null) {
-            // Sin imagen de pie de firma se imprime el nombre, que es para lo
-            // mismo: que se sepa quién firmó.
-            Phrase nombre = new Phrase(dirigente.nombre(), CELDA);
-            PdfPCell interna = new PdfPCell(nombre);
+        if (dirigente != null) {
+            String pie = dirigente.pieDeFirma() == null
+                    || dirigente.pieDeFirma().isBlank()
+                    ? dirigente.nombre() : dirigente.pieDeFirma();
+            Phrase textoPie = new Phrase(pie, CELDA);
+            PdfPCell interna = new PdfPCell(textoPie);
             interna.setBorder(Rectangle.NO_BORDER);
             interna.setHorizontalAlignment(Element.ALIGN_CENTER);
             PdfPTable envoltorio = new PdfPTable(1);

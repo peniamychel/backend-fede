@@ -116,7 +116,10 @@ public class ImagenProductorService {
 
     private ImagenResponse guardarVariante(Productor productor, TipoImagen tipo,
                                            BufferedImage origen, String nombreArchivo) {
-        ProcesadorImagenes.Variante variante = procesador.generar(origen, tipo);
+        // Las fotos nuevas llegan como PNG cuadrado desde la vista previa de la
+        // app. Se conserva su canal alfa para poder colocar luego otro fondo
+        // al emitir la credencial.
+        ProcesadorImagenes.Variante variante = procesador.generarPng(origen, tipo);
 
         ImagenProductor imagen = imagenRepository
                 .findByProductorIdAndTipo(productor.getId(), tipo)
@@ -128,7 +131,7 @@ public class ImagenProductorService {
                 });
 
         String claveAnterior = imagen.getClave();
-        String claveNueva = nuevaClave(productor, tipo);
+        String claveNueva = nuevaClave(productor, tipo, variante.tipoMime());
 
         almacen.guardar(claveNueva, variante.contenido());
         // Si la transacción no llega a confirmar, este archivo no le sirve a
@@ -174,7 +177,7 @@ public class ImagenProductorService {
 
     /**
      * Clave única por subida:
-     * {@code originales/2ab3fb23fb23-juan-morales.jpg}.
+     * {@code originales/2ab3fb23fb23-juan-morales.png}.
      * <p>
      * Dos partes:
      * <ul>
@@ -190,10 +193,11 @@ public class ImagenProductorService {
      * Va primero el aleatorio para que la parte que garantiza unicidad no
      * quede nunca recortada por el tope de longitud del nombre.
      */
-    private String nuevaClave(Productor productor, TipoImagen tipo) {
+    private String nuevaClave(Productor productor, TipoImagen tipo, String tipoMime) {
         String aleatorio = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         String nombre = Textos.paraNombreDeArchivo(productor.getNombreCompleto(), 40);
-        return tipo.getDirectorio() + "/" + aleatorio + "-" + nombre + ".jpg";
+        String extension = "image/png".equals(tipoMime) ? ".png" : ".jpg";
+        return tipo.getDirectorio() + "/" + aleatorio + "-" + nombre + extension;
     }
 
     private String recortar(String nombre) {

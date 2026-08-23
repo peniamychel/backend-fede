@@ -84,7 +84,7 @@ public class CentralController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Elimina una central",
             description = "Devuelve 409 si todavía tiene sindicatos: el borrado en cascada "
-                    + "arrastraría también a sus productores, lotes y observaciones.")
+                    + "arrastraría también a sus productores y a sus lotes.")
     public void eliminar(@PathVariable Long id) {
         centralService.eliminar(id);
     }

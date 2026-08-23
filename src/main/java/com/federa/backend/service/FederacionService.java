@@ -40,11 +40,15 @@ public class FederacionService {
     @Transactional
     public FederacionResponse crear(FederacionRequest request) {
         String nombre = Textos.normalizar(request.nombre());
+        String numero = Textos.limpiar(request.numero());
         if (federacionRepository.existsByNombreIgnoreCase(nombre)) {
             throw new ReglaNegocioException("Ya existe una federación llamada " + nombre);
         }
+        verificarNumeroLibre(numero, null);
+
         Federacion federacion = new Federacion();
         federacion.setNombre(nombre);
+        federacion.setNumero(numero);
         return FederacionResponse.desde(federacionRepository.save(federacion));
     }
 
@@ -52,17 +56,41 @@ public class FederacionService {
     public FederacionResponse actualizar(Long id, FederacionRequest request) {
         Federacion federacion = buscar(id);
         String nombre = Textos.normalizar(request.nombre());
+        String numero = Textos.limpiar(request.numero());
         federacionRepository.findByNombreIgnoreCase(nombre)
                 .filter(otra -> !otra.getId().equals(id))
                 .ifPresent(otra -> {
                     throw new ReglaNegocioException("Ya existe una federación llamada " + nombre);
                 });
+        verificarNumeroLibre(numero, id);
+
         federacion.setNombre(nombre);
+        federacion.setNumero(numero);
         // Se fuerza el UPDATE antes de mapear: el oyente de auditoría escribe
         // updatedAt recién al grabar, y sin esto la respuesta saldría con la
         // fecha vieja aunque la base quede bien.
         federacionRepository.flush();
         return FederacionResponse.desde(federacion);
+    }
+
+    /**
+     * El número es único entre todas las federaciones.
+     * <p>
+     * Se comprueba acá para poder devolver un mensaje que diga cuál es la otra.
+     * La clave única de la base sigue estando: es la que cubre el caso de dos
+     * altas al mismo tiempo, que esta consulta no puede ver.
+     */
+    private void verificarNumeroLibre(String numero, Long idActual) {
+        if (numero == null) {
+            return;
+        }
+        federacionRepository.findByNumero(numero)
+                .filter(otra -> !otra.getId().equals(idActual))
+                .ifPresent(otra -> {
+                    throw new ReglaNegocioException(
+                            "El número " + numero + " ya lo tiene la federación "
+                                    + otra.getNombre());
+                });
     }
 
     /**

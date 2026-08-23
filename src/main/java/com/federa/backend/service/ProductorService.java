@@ -36,6 +36,7 @@ public class ProductorService {
     private final ImagenProductorRepository imagenRepository;
     private final ImagenCargoRepository imagenCargoRepository;
     private final SindicatoService sindicatoService;
+    private final NumeradorPadron numerador;
     private final AlmacenObjetos almacen;
 
     public ProductorService(ProductorRepository productorRepository,
@@ -43,12 +44,14 @@ public class ProductorService {
                             ImagenProductorRepository imagenRepository,
                             ImagenCargoRepository imagenCargoRepository,
                             SindicatoService sindicatoService,
+                            NumeradorPadron numerador,
                             AlmacenObjetos almacen) {
         this.productorRepository = productorRepository;
         this.tenenciaRepository = tenenciaRepository;
         this.imagenRepository = imagenRepository;
         this.imagenCargoRepository = imagenCargoRepository;
         this.sindicatoService = sindicatoService;
+        this.numerador = numerador;
         this.almacen = almacen;
     }
 
@@ -71,18 +74,9 @@ public class ProductorService {
         return productorRepository.findCedulasDuplicadas();
     }
 
-    public List<String> carnetsDuplicados() {
-        return productorRepository.findCarnetsDuplicados();
-    }
-
     /** Todos los productores que comparten una misma cédula. */
     public List<ProductorResponse> porCedula(String ci) {
         return conImagenes(productorRepository.findByCi(ci));
-    }
-
-    /** Todos los productores que comparten un mismo carné. */
-    public List<ProductorResponse> porCarnet(String carnet) {
-        return conImagenes(productorRepository.findByCarnetProductor(carnet));
     }
 
     @Transactional
@@ -104,7 +98,7 @@ public class ProductorService {
     }
 
     /**
-     * Borra el productor con sus observaciones, imágenes y períodos de
+     * Borra el productor con sus imágenes y sus períodos de
      * tenencia. <b>Sus lotes no</b>: la tierra pertenece al sindicato y se
      * queda ahí, con o sin él.
      * <p>
@@ -165,15 +159,40 @@ public class ProductorService {
 
     private void aplicar(Productor productor, ProductorRequest request) {
         Sindicato sindicato = sindicatoService.buscar(request.sindicatoId());
+        // Antes de pisarlo: de dónde venía decide si conserva su número o le
+        // toca uno nuevo.
+        Sindicato anterior = productor.getSindicato();
         productor.setNombres(Textos.normalizar(request.nombres()));
         productor.setApellidos(Textos.normalizar(request.apellidos()));
         productor.setCi(Textos.limpiar(request.ci()));
-        productor.setCarnetProductor(Textos.limpiar(request.carnetProductor()));
         productor.setNombresCorregidos(Textos.normalizar(request.nombresCorregidos()));
         productor.setApellidosCorregidos(Textos.normalizar(request.apellidosCorregidos()));
         productor.setFotoDescripcion(Textos.limpiar(request.fotoDescripcion()));
         productor.setMarcado(Boolean.TRUE.equals(request.marcado()));
         productor.setSindicato(sindicato);
+        numerar(productor, anterior, sindicato);
+    }
+
+    /**
+     * Le da al productor el número que le toca dentro de su central.
+     * <p>
+     * Se lo numera en dos casos: cuando todavía no tiene número —el alta, y las
+     * filas que quedaron sin migrar— y cuando se muda a un sindicato de otra
+     * central. Lo segundo es necesario porque el número pertenece a la
+     * numeración de una central: llevárselo a otra chocaría con el que allá ya
+     * tiene alguien.
+     * <p>
+     * Cambiar de sindicato dentro de la misma central no lo toca: el código
+     * sigue siendo válido y una credencial impresa sigue sirviendo.
+     */
+    private void numerar(Productor productor, Sindicato anterior, Sindicato nuevo) {
+        Long centralNueva = nuevo.getCentral().getId();
+        boolean cambioDeCentral = anterior == null
+                || !centralNueva.equals(anterior.getCentral().getId());
+        if (productor.getCorrelativo() != null && !cambioDeCentral) {
+            return;
+        }
+        productor.setCorrelativo(numerador.siguiente(centralNueva));
     }
 
     /**
