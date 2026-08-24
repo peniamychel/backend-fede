@@ -22,7 +22,7 @@ public class CorsConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-                .allowedOrigins(origenesPermitidos.toArray(String[]::new))
+                .allowedOriginPatterns(origenesPermitidos.toArray(String[]::new))
                 // PATCH es necesario para confirmar la corrección de nombre y
                 // para habilitar o deshabilitar un registro; sin él el navegador
                 // recibe 403 "Invalid CORS request" ya en el preflight.

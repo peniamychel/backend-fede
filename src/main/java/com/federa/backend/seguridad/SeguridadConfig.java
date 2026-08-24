@@ -140,7 +140,7 @@ public class SeguridadConfig {
     @Bean
     public CorsConfigurationSource fuenteCors() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(origenesPermitidos);
+        config.setAllowedOriginPatterns(origenesPermitidos);
         config.setAllowedMethods(
                 List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
