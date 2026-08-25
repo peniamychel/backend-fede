@@ -9,6 +9,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TextosTest {
 
     @Test
+    @DisplayName("convierte una búsqueda de nombre completo en un patrón flexible")
+    void patronDeBusquedaConVariasPalabras() {
+        assertThat(Textos.patronBusqueda("  José   Ángel Pérez  "))
+                .isEqualTo("%JOSE%ANGEL%PEREZ%");
+    }
+
+    @Test
+    @DisplayName("no construye patrón para una búsqueda vacía")
+    void patronDeBusquedaVacio() {
+        assertThat(Textos.patronBusqueda("   ")).isNull();
+    }
+
+    @Test
     @DisplayName("quita tildes y pasa a minúsculas con guiones")
     void normalizaAcentosYEspacios() {
         assertThat(Textos.paraNombreDeArchivo("José Ángel Muñóz", 40))

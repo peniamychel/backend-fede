@@ -13,6 +13,7 @@ import com.federa.backend.model.Lote;
 import com.federa.backend.model.Productor;
 import com.federa.backend.model.Sindicato;
 import com.federa.backend.model.Veto;
+import com.federa.backend.model.enums.Ambito;
 import com.federa.backend.model.enums.ExtensionLote;
 import com.federa.backend.model.enums.TipoCargo;
 import com.federa.backend.model.enums.TipoImagen;
@@ -111,6 +112,10 @@ public class CredencialService {
     // ------------------------------------------------------------- una sola
 
     public Descarga generar(Long productorId) {
+        return generar(productorId, CaraCredencial.COMPLETA);
+    }
+
+    public Descarga generar(Long productorId, CaraCredencial cara) {
         Productor productor = productorRepository.findById(productorId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("productor", productorId));
         Sindicato sindicato = productor.getSindicato();
@@ -133,9 +138,10 @@ public class CredencialService {
                 fotoDe(productorId), directorio);
 
         String nombre = "credencial-"
-                + Textos.paraNombreDeArchivo(productor.getNombreCompleto(), 40) + ".pdf";
+                + Textos.paraNombreDeArchivo(productor.getNombreCompleto(), 40)
+                + cara.sufijo() + ".pdf";
         return new Descarga(nombre, generador.generar(credencial,
-                disenoCredencialService.actual()));
+                disenoCredencialService.actual(), cara));
     }
 
     // ------------------------------------------------------- la vista previa
@@ -185,6 +191,7 @@ public class CredencialService {
                 firmantePrevio(jerarquia.ejecutivoFederacion()),
                 firmantePrevio(jerarquia.secretarioCentral()),
                 firmantePrevio(jerarquia.secretarioSindicato()),
+                requisitos.firmaObligatoria(Ambito.SINDICATO),
                 faltantes,
                 bloqueo,
                 // Completa es las dos cosas: que no falte nada y que la
@@ -341,7 +348,8 @@ public class CredencialService {
                 cargo.getProductor().getNombreCompleto(),
                 cargo.getCargo().getEtiqueta().toUpperCase(Locale.ROOT),
                 cargo.getDuenoNombre(),
-                urlDe(claveDe(cargo, TipoImagenCargo.FIRMA)));
+                urlDe(claveDe(cargo, TipoImagenCargo.FIRMA)),
+                urlDe(claveDe(cargo, TipoImagenCargo.PIE_FIRMA)));
     }
 
     // -------------------------------------------------------- del dirigente
@@ -356,6 +364,10 @@ public class CredencialService {
      * alguien ocupó el cargo, y el reverso dice entre qué fechas.
      */
     public Descarga generarDeCargo(Long cargoId) {
+        return generarDeCargo(cargoId, CaraCredencial.COMPLETA);
+    }
+
+    public Descarga generarDeCargo(Long cargoId, CaraCredencial cara) {
         Cargo cargo = cargoRepository.findById(cargoId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("cargo", cargoId));
         Productor productor = cargo.getProductor();
@@ -385,8 +397,9 @@ public class CredencialService {
                 generadorQr.generar(productor.getCodigo()));
 
         String nombre = "credencial-" + cargo.getCargo().name().toLowerCase() + "-"
-                + Textos.paraNombreDeArchivo(productor.getNombreCompleto(), 40) + ".pdf";
-        return new Descarga(nombre, generadorDirigente.generar(credencial));
+                + Textos.paraNombreDeArchivo(productor.getNombreCompleto(), 40)
+                + cara.sufijo() + ".pdf";
+        return new Descarga(nombre, generadorDirigente.generar(credencial, cara));
     }
 
     /**
@@ -507,7 +520,8 @@ public class CredencialService {
                 cargo.getProductor().getNombreCompleto(),
                 cargo.getCargo().getEtiqueta().toUpperCase(Locale.ROOT),
                 cargo.getDuenoNombre(),
-                bytesDe(cargo, TipoImagenCargo.FIRMA));
+                bytesDe(cargo, TipoImagenCargo.FIRMA),
+                bytesDe(cargo, TipoImagenCargo.PIE_FIRMA));
     }
 
     private record Jerarquia(Cargo ejecutivoFederacion, Cargo secretarioCentral,

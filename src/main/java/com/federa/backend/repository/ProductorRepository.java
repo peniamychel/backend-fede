@@ -61,9 +61,21 @@ public interface ProductorRepository extends JpaRepository<Productor, Long> {
             where (:sindicatoId is null or s.id = :sindicatoId)
               and (:centralId is null or c.id = :centralId)
               and (:texto is null
-                   or upper(p.nombres) like upper(concat('%', :texto, '%'))
-                   or upper(p.apellidos) like upper(concat('%', :texto, '%'))
-                   or p.ci like concat('%', :texto, '%')
+                   or upper(p.nombres) like :patron
+                   or upper(p.apellidos) like :patron
+                   or upper(p.nombresCorregidos) like :patron
+                   or upper(p.apellidosCorregidos) like :patron
+                   or upper(concat(concat(p.nombres, ' '), coalesce(p.apellidos, '')))
+                        like :patronNombre
+                   or upper(concat(concat(coalesce(p.apellidos, ''), ' '), p.nombres))
+                        like :patronNombre
+                   or upper(concat(concat(coalesce(p.nombresCorregidos, p.nombres), ' '),
+                                           coalesce(p.apellidosCorregidos, p.apellidos, '')))
+                        like :patronNombre
+                   or upper(concat(concat(coalesce(p.apellidosCorregidos, p.apellidos, ''), ' '),
+                                           coalesce(p.nombresCorregidos, p.nombres)))
+                        like :patronNombre
+                   or p.ci like :patron
                    or upper(p.codigo) = upper(:texto)
                    or upper(concat(f.numero, '-', c.abreviatura, '-', p.correlativo))
                         = upper(:texto))
@@ -71,6 +83,8 @@ public interface ProductorRepository extends JpaRepository<Productor, Long> {
     Page<Productor> filtrar(@Param("sindicatoId") Long sindicatoId,
                             @Param("centralId") Long centralId,
                             @Param("texto") String texto,
+                            @Param("patron") String patron,
+                            @Param("patronNombre") String patronNombre,
                             Pageable pageable);
 
     /**

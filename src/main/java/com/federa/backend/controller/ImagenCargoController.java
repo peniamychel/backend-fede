@@ -30,9 +30,11 @@ public class ImagenCargoController {
     }
 
     @PostMapping(value = "/{tipo}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Sube la firma",
+    @Operation(summary = "Sube la firma o el pie de firma",
             description = """
-                    `tipo` es FIRMA. Se acepta cualquier tamaño de archivo: la \
+                    `tipo` es FIRMA o PIE_FIRMA. El pie de firma en imagen está \
+                    habilitado para federación y central; en sindicato depende de \
+                    la configuración. Se acepta cualquier tamaño de archivo: la \
                     imagen se guarda como PNG transparente y se reduce a 200 píxeles de lado mayor, conservando la \
                     proporción —una firma apaisada queda 200 de ancho y lo que corresponda de \
                     alto, en vez de estirarse a un cuadrado.
@@ -42,7 +44,7 @@ public class ImagenCargoController {
     public CargoResponse subir(
             @PathVariable Long cargoId,
 
-            @Parameter(description = "FIRMA, en cualquier combinación de mayúsculas.",
+            @Parameter(description = "FIRMA o PIE_FIRMA, en cualquier combinación de mayúsculas.",
                     example = "firma")
             @PathVariable TipoImagenCargo tipo,
 

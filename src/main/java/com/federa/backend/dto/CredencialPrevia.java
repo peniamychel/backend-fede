@@ -25,6 +25,7 @@ public record CredencialPrevia(
         Firmante ejecutivoFederacion,
         Firmante secretarioGeneralCentral,
         Firmante secretarioGeneralSindicato,
+        boolean firmaSindicatoObligatoria,
         List<Faltante> faltantes,
         Bloqueo bloqueo,
         boolean completa
@@ -35,7 +36,7 @@ public record CredencialPrevia(
 
     /** Firma y pie automático que se muestran exactamente como en el PDF. */
     public record Firmante(String nombre, String cargo, String organizacion,
-                           String firmaUrl) {
+                           String firmaUrl, String pieFirmaUrl) {
     }
 
     public record Faltante(String campo, String detalle, String donde) {

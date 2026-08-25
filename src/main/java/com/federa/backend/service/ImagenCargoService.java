@@ -34,15 +34,18 @@ public class ImagenCargoService {
     private final CargoRepository cargoRepository;
     private final ProcesadorImagenes procesador;
     private final AlmacenObjetos almacen;
+    private final ReglasDirectorio reglas;
 
     public ImagenCargoService(ImagenCargoRepository imagenRepository,
                               CargoRepository cargoRepository,
                               ProcesadorImagenes procesador,
-                              AlmacenObjetos almacen) {
+                              AlmacenObjetos almacen,
+                              ReglasDirectorio reglas) {
         this.imagenRepository = imagenRepository;
         this.cargoRepository = cargoRepository;
         this.procesador = procesador;
         this.almacen = almacen;
+        this.reglas = reglas;
     }
 
     /** Sube o reemplaza una de las dos imágenes de un período. */
@@ -51,9 +54,11 @@ public class ImagenCargoService {
                                  String nombreArchivo) {
         Cargo cargo = buscar(cargoId);
         verificarQuePuedeFirmar(cargo);
-        if (tipo != TipoImagenCargo.FIRMA) {
+        if (tipo == TipoImagenCargo.PIE_FIRMA
+                && !reglas.permitePieFirmaImagen(cargo.getAmbito())) {
             throw new ReglaNegocioException(
-                    "El pie de firma ahora se registra como texto, no como imagen.");
+                    "El pie de firma en imagen está deshabilitado para sindicatos. "
+                            + "Puede habilitarse en la configuración del backend.");
         }
 
         BufferedImage origen = procesador.leer(subido);

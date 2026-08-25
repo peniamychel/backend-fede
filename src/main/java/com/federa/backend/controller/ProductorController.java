@@ -7,6 +7,7 @@ import com.federa.backend.dto.EstadoRequest;
 import com.federa.backend.dto.ProductorDetalleResponse;
 import com.federa.backend.dto.ProductorRequest;
 import com.federa.backend.dto.ProductorResponse;
+import com.federa.backend.service.CaraCredencial;
 import com.federa.backend.service.CredencialService;
 import com.federa.backend.service.DirectorioService;
 import com.federa.backend.service.ProductorService;
@@ -104,8 +105,10 @@ public class ProductorController {
                     409 diciendo qué falta en vez de emitir una tarjeta a medias: una credencial \
                     sale plastificada y se reparte, y rehacerla cuesta más que completarla \
                     antes. Consultá `/credencial/previa` para verlo con detalle.""")
-    public ResponseEntity<byte[]> credencial(@PathVariable Long id) {
-        return comoAdjunto(credencialService.generar(id));
+    public ResponseEntity<byte[]> credencial(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "COMPLETA") CaraCredencial cara) {
+        return comoAdjunto(credencialService.generar(id, cara));
     }
 
     @GetMapping("/{id}/credencial/previa")

@@ -44,7 +44,7 @@ public class ProductorImagenController {
     @Operation(summary = "Sube la foto del productor",
             description = """
                     Se sube **una sola** imagen y el servidor deriva las dos variantes que \
-                    guarda: la foto cuadrada PNG de hasta 300 KB, conservando transparencia, \
+                    guarda: la foto cuadrada PNG optimizada hacia 300 KB, conservando transparencia, \
                     y una miniatura PNG para los listados.
 
                     No hay límite de tamaño para el archivo que se sube más allá del tope de \

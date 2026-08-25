@@ -56,8 +56,11 @@ public class ProductorService {
     }
 
     public Page<ProductorResponse> listar(Long sindicatoId, Long centralId, String texto, Pageable pageable) {
+        String busqueda = Textos.normalizar(texto);
+        String patron = busqueda == null ? null : "%" + busqueda + "%";
         return conImagenes(productorRepository
-                .filtrar(sindicatoId, centralId, Textos.limpiar(texto),
+                .filtrar(sindicatoId, centralId, busqueda, patron,
+                        Textos.patronBusqueda(busqueda),
                         Paginas.conOrdenEstable(pageable)));
     }
 

@@ -7,6 +7,7 @@ import com.federa.backend.model.ImagenCargo;
 import com.federa.backend.model.Productor;
 import com.federa.backend.model.Sindicato;
 import com.federa.backend.model.enums.TipoImagenCargo;
+import com.federa.backend.model.enums.Ambito;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -18,6 +19,11 @@ public class RequisitosCredencial {
 
     private static final String EN_LA_FICHA = "Ficha del productor";
     private static final String EN_LA_JERARQUIA = "Jerarquía";
+    private final ReglasDirectorio reglas;
+
+    public RequisitosCredencial(ReglasDirectorio reglas) {
+        this.reglas = reglas;
+    }
 
     /** Revisa los tres niveles que componen el reverso de la credencial. */
     public List<Faltante> deJerarquia(Sindicato sindicato, Cargo ejecutivoFederacion,
@@ -46,11 +52,13 @@ public class RequisitosCredencial {
                 "Sindicatos", true);
 
         revisarFirmante(faltantes, ejecutivoFederacion, "Ejecutivo de la federación",
-                central.getFederacion().getNombre(), "Federaciones");
+                central.getFederacion().getNombre(), "Federaciones",
+                reglas.firmaObligatoria(Ambito.FEDERACION));
         revisarFirmante(faltantes, secretarioCentral, "Secretario General de la central",
-                central.getNombre(), "Centrales");
+                central.getNombre(), "Centrales", reglas.firmaObligatoria(Ambito.CENTRAL));
         revisarFirmante(faltantes, secretarioSindicato, "Secretario General del sindicato",
-                sindicato.getNombre(), "Sindicatos");
+                sindicato.getNombre(), "Sindicatos",
+                reglas.firmaObligatoria(Ambito.SINDICATO));
         return faltantes;
     }
 
@@ -90,18 +98,26 @@ public class RequisitosCredencial {
     }
 
     private void revisarFirmante(List<Faltante> faltantes, Cargo cargo, String titulo,
-                                 String organizacion, String pantalla) {
+                                 String organizacion, String pantalla,
+                                 boolean firmaObligatoria) {
         String donde = EN_LA_JERARQUIA + " → " + pantalla + " → Directorio";
         if (cargo == null) {
+            if (!firmaObligatoria) {
+                return;
+            }
             faltantes.add(new Faltante(titulo,
                     organizacion + " no tiene " + titulo.toLowerCase() + " en funciones",
                     donde));
             return;
         }
-        if (!tieneImagen(cargo, TipoImagenCargo.FIRMA)) {
+        if (firmaObligatoria && !tieneImagen(cargo, TipoImagenCargo.FIRMA)) {
             faltantes.add(new Faltante("Firma del " + titulo.toLowerCase(),
                     cargo.getProductor().getNombreCompleto() + " no subió su firma", donde));
         }
+    }
+
+    public boolean firmaObligatoria(Ambito ambito) {
+        return reglas.firmaObligatoria(ambito);
     }
 
     private boolean tieneImagen(Cargo cargo, TipoImagenCargo tipo) {

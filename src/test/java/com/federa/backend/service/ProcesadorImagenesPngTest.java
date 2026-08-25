@@ -8,6 +8,7 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.util.Random;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -71,5 +72,33 @@ class ProcesadorImagenesPngTest {
         BufferedImage resultado = ImageIO.read(new ByteArrayInputStream(firma.contenido()));
         assertThat(resultado.getColorModel().hasAlpha()).isTrue();
         assertThat((resultado.getRGB(0, 0) >>> 24) & 0xff).isZero();
+    }
+
+    @Test
+    void noRechazaUnaMiniaturaPngConMuchoDetalleAunqueSupereElPesoObjetivo() {
+        BufferedImage origen = new BufferedImage(600, 600, BufferedImage.TYPE_INT_ARGB);
+        Random aleatorio = new Random(42);
+        for (int y = 0; y < origen.getHeight(); y++) {
+            for (int x = 0; x < origen.getWidth(); x++) {
+                // Simula cabello, piel y texturas irregulares que un PNG no
+                // puede reducir tanto como las figuras planas del otro test.
+                int alfa = 120 + aleatorio.nextInt(136);
+                int rojo = aleatorio.nextInt(256);
+                int verde = aleatorio.nextInt(256);
+                int azul = aleatorio.nextInt(256);
+                origen.setRGB(x, y,
+                        (alfa << 24) | (rojo << 16) | (verde << 8) | azul);
+            }
+        }
+
+        ProcesadorImagenes.Variante miniatura = procesador.generarPng(
+                origen, TipoImagen.MINIATURA);
+
+        assertThat(miniatura.ancho()).isLessThanOrEqualTo(128);
+        assertThat(miniatura.alto()).isLessThanOrEqualTo(128);
+        assertThat(miniatura.contenido()).isNotEmpty();
+        // Documenta el caso que antes lanzaba ArchivoInvalidoException.
+        assertThat(miniatura.contenido().length)
+                .isGreaterThan(TipoImagen.MINIATURA.getPesoObjetivo());
     }
 }

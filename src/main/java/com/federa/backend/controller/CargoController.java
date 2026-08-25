@@ -3,6 +3,7 @@ package com.federa.backend.controller;
 import com.federa.backend.config.ApiRutas;
 import com.federa.backend.dto.CargoResponse;
 import com.federa.backend.dto.PieFirmaRequest;
+import com.federa.backend.service.CaraCredencial;
 import com.federa.backend.service.DirectorioService;
 import com.federa.backend.service.CredencialService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import jakarta.validation.Valid;
 
@@ -64,7 +66,9 @@ public class CargoController {
 
                     Sirve también para períodos ya cerrados, como constancia de que ocupó el \
                     cargo; el reverso dice entre qué fechas.""")
-    public ResponseEntity<byte[]> credencial(@PathVariable Long id) {
-        return ProductorController.comoAdjunto(credencialService.generarDeCargo(id));
+    public ResponseEntity<byte[]> credencial(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "COMPLETA") CaraCredencial cara) {
+        return ProductorController.comoAdjunto(credencialService.generarDeCargo(id, cara));
     }
 }

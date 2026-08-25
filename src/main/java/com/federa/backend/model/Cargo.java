@@ -117,15 +117,14 @@ public class Cargo extends EntidadAuditable {
     private Boolean vigente;
 
     /**
-     * Texto que se imprime debajo de la firma. Reemplaza a la antigua imagen
-     * de pie de firma y puede conservar la forma institucional exacta.
+     * Texto automático de respaldo que se imprime debajo de la firma cuando
+     * el período no tiene una imagen de pie de firma.
      */
     @Column(name = "pie_firma", length = 200)
     private String pieFirma;
 
     /**
-     * Firma de este período. La colección todavía admite los pies de firma
-     * históricos para no destruir archivos cargados antes del cambio a texto.
+     * Firma y pie de firma en imagen de este período.
      */
     @Builder.Default
     @OneToMany(mappedBy = "cargo", cascade = CascadeType.ALL, orphanRemoval = true)

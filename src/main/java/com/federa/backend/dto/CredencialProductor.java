@@ -32,11 +32,16 @@ public record CredencialProductor(
                 emitidaEl, codigo, codigoPadron, qr);
     }
 
-    /** La firma y el pie automático que la identifica. */
-    public record Firmante(String nombre, String cargo, String organizacion, byte[] firma) {
+    /** La firma y el pie que la identifica; la imagen reemplaza al texto automático. */
+    public record Firmante(String nombre, String cargo, String organizacion,
+                           byte[] firma, byte[] pieFirma) {
+        public Firmante(String nombre, String cargo, String organizacion, byte[] firma) {
+            this(nombre, cargo, organizacion, firma, null);
+        }
+
         /** Constructor anterior: el tercer archivo era un pie de firma en imagen. */
         public Firmante(String nombre, byte[] firma, byte[] pieFirmaHistorico) {
-            this(nombre, "SECRETARIO GENERAL", "", firma);
+            this(nombre, "SECRETARIO GENERAL", "", firma, pieFirmaHistorico);
         }
     }
 }

@@ -89,6 +89,12 @@ public class CredencialProductorPdf {
     }
 
     public byte[] generar(CredencialProductor credencial, DisenoCredencial diseno) {
+        return generar(credencial, diseno, CaraCredencial.COMPLETA);
+    }
+
+    /** Genera ambos lados o una sola página para impresoras sin dúplex. */
+    public byte[] generar(CredencialProductor credencial, DisenoCredencial diseno,
+                          CaraCredencial cara) {
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
         Document documento = new Document(new Rectangle(ANCHO, ALTO), 0, 0, 0, 0);
         try {
@@ -96,13 +102,19 @@ public class CredencialProductorPdf {
             documento.open();
             PdfContentByte lienzo = escritor.getDirectContent();
 
-            dibujarAnverso(lienzo, 0, 0, credencial, diseno);
-            // Sin esto la página se descarta: para el documento está vacía,
-            // porque todo se pintó directamente sobre la hoja.
-            escritor.setPageEmpty(false);
-            documento.newPage();
-            dibujarReverso(lienzo, 0, 0, credencial, diseno);
-            escritor.setPageEmpty(false);
+            if (cara != CaraCredencial.REVERSO) {
+                dibujarAnverso(lienzo, 0, 0, credencial, diseno);
+                // Sin esto la página se descarta: para el documento está vacía,
+                // porque todo se pintó directamente sobre la hoja.
+                escritor.setPageEmpty(false);
+            }
+            if (cara == CaraCredencial.COMPLETA) {
+                documento.newPage();
+            }
+            if (cara != CaraCredencial.ANVERSO) {
+                dibujarReverso(lienzo, 0, 0, credencial, diseno);
+                escritor.setPageEmpty(false);
+            }
 
             documento.close();
         } catch (DocumentException e) {
@@ -280,18 +292,20 @@ public class CredencialProductorPdf {
         float y = origenY + e.y();
         float ancho = e.ancho();
         float alto = e.alto();
-        lienzo.setColorFill(Color.WHITE);
-        lienzo.rectangle(x, y, ancho, alto);
-        lienzo.fill();
-        lienzo.setColorStroke(Color.BLACK);
-        lienzo.setLineWidth(0.6f);
-        lienzo.moveTo(x, y + alto);
-        lienzo.lineTo(x + ancho, y + alto);
-        lienzo.stroke();
-
         if (firmante == null) {
+            if ("PIE_SINDICATO".equals(e.campo())) {
+                return;
+            }
             Font aviso = fuente(e.tamanoFuente(), Font.BOLD, color(e.color()));
             centrado(lienzo, "SIN FIRMANTE", aviso, x + ancho / 2f, y + alto * .48f);
+            return;
+        }
+        Image pieImagen = imagen(firmante.pieFirma(), ancho, alto - 2f);
+        if (pieImagen != null) {
+            pieImagen.setAbsolutePosition(
+                    x + (ancho - pieImagen.getScaledWidth()) / 2f,
+                    y + (alto - pieImagen.getScaledHeight()) / 2f - 1f);
+            agregar(lienzo, pieImagen);
             return;
         }
         float factor = alto / 21f;

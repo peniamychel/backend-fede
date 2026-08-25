@@ -144,6 +144,26 @@ class CredencialDirigentePdfTest {
     }
 
     @Test
+    @DisplayName("cada lado del dirigente se genera en una sola página")
+    void carasSeparadas() throws IOException {
+        CredencialDirigente datos = presidenteDeSindicato();
+        byte[] anverso = generador.generar(datos, CaraCredencial.ANVERSO);
+        byte[] reverso = generador.generar(datos, CaraCredencial.REVERSO);
+
+        PdfReader lectorAnverso = new PdfReader(anverso);
+        PdfReader lectorReverso = new PdfReader(reverso);
+        try {
+            assertThat(lectorAnverso.getNumberOfPages()).isEqualTo(1);
+            assertThat(lectorReverso.getNumberOfPages()).isEqualTo(1);
+        } finally {
+            lectorAnverso.close();
+            lectorReverso.close();
+        }
+        assertThat(texto(anverso, 1)).contains("CREDENCIAL DE DIRIGENTE");
+        assertThat(texto(reverso, 1)).contains("ACREDITACIÓN");
+    }
+
+    @Test
     @DisplayName("ninguna línea del anverso cae debajo de la banda del pie")
     void elAnversoEntra() {
         // Esta es la prueba de un error real: el sindicato quedaba dibujado

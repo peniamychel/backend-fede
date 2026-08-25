@@ -161,6 +161,28 @@ class CredencialProductorPdfTest {
     }
 
     @Test
+    @DisplayName("cada lado se puede generar como un PDF de una sola página")
+    void carasSeparadas() throws IOException {
+        CredencialProductor datos = credencial(null, null, null);
+        byte[] anverso = generador.generar(
+                datos, DisenoCredencial.porDefecto(), CaraCredencial.ANVERSO);
+        byte[] reverso = generador.generar(
+                datos, DisenoCredencial.porDefecto(), CaraCredencial.REVERSO);
+
+        PdfReader lectorAnverso = new PdfReader(anverso);
+        PdfReader lectorReverso = new PdfReader(reverso);
+        try {
+            assertThat(lectorAnverso.getNumberOfPages()).isEqualTo(1);
+            assertThat(lectorReverso.getNumberOfPages()).isEqualTo(1);
+        } finally {
+            lectorAnverso.close();
+            lectorReverso.close();
+        }
+        assertThat(texto(anverso, 1)).contains("CANDIDO COLQUECHAMBI MAMANI");
+        assertThat(texto(reverso, 1)).contains("SIN FIRMANTE");
+    }
+
+    @Test
     @DisplayName("el anverso lleva los datos del productor")
     void anversoConDatos() throws IOException {
         String anverso = texto(generador.generar(credencial(null, null, null)), 1);
@@ -221,17 +243,21 @@ class CredencialProductorPdfTest {
     }
 
     @Test
-    @DisplayName("el pie automático siempre imprime nombre, cargo y organización")
+    @DisplayName("la imagen de pie de firma reemplaza al texto automático")
     void firmantesConSello() throws IOException {
         CredencialProductor.Firmante presidente = new CredencialProductor.Firmante(
-                "ALBERTO CHOQUE", firmaDe("a"),
+                "ALBERTO CHOQUE", "SECRETARIO GENERAL", "CENTRAL 1RO MAYO",
+                firmaDe("a"),
                 selloDe("ALBERTO CHOQUE", "SECRETARIO GENERAL"));
 
         String reverso = texto(generador.generar(
                 credencial(null, presidente, null)), 2);
 
-        assertThat(reverso).contains("SECRETARIO GENERAL");
-        assertThat(reverso).contains("ALBERTO CHOQUE");
+        assertThat(reverso).doesNotContain("SECRETARIO GENERAL");
+        assertThat(reverso).doesNotContain("ALBERTO CHOQUE");
+        // La federación vacía conserva el aviso. El sindicato vacío es
+        // opcional y deja su espacio en blanco.
+        assertThat(reverso.split("SIN FIRMANTE", -1)).hasSize(2);
     }
 
     @Test

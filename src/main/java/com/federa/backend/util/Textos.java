@@ -73,4 +73,15 @@ public final class Textos {
         }
         return limpio;
     }
+
+    /**
+     * Patrón para buscar varias palabras consecutivas aunque estén separadas
+     * entre las columnas de nombres y apellidos.
+     * <p>
+     * {@code "José   Pérez"} se convierte en {@code "%JOSE%PEREZ%"}.
+     */
+    public static String patronBusqueda(String valor) {
+        String normalizado = normalizar(valor);
+        return normalizado == null ? null : "%" + normalizado.replace(" ", "%") + "%";
+    }
 }

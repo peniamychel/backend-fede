@@ -80,9 +80,10 @@ public class ImagenProductorService {
     /**
      * Guarda la foto de un productor a partir de un único archivo.
      * <p>
-     * Se acepta cualquier tamaño: la imagen se escala y se comprime hasta
-     * entrar en el peso objetivo de cada variante. Si el productor ya tenía
-     * foto, se reemplazan las dos.
+     * Se acepta cualquier tamaño: la imagen se escala y se optimiza hacia el
+     * peso objetivo de cada variante. Si un PNG detallado alcanza el lado
+     * mínimo antes del peso, se conserva esa mejor aproximación. Si el
+     * productor ya tenía foto, se reemplazan las dos.
      */
     /**
      * @param recorte región a conservar, o null para usar la imagen entera

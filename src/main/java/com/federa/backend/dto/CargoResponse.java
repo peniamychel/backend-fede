@@ -59,8 +59,8 @@ public record CargoResponse(
                 example = "JUAN MORALES\nSECRETARIO GENERAL\n1RO DE MAYO")
         String pieFirma,
 
-        @Schema(description = "URL histórica del antiguo pie de firma en imagen. "
-                + "Solo se conserva para compatibilidad; ya no se cargan nuevas.",
+        @Schema(description = "URL del pie de firma en imagen. En federación y central "
+                + "puede cargarse para reemplazar el pie textual automático.",
                 example = "/api/v1/archivos/pies-firma/f6e5d4c3b2a1-juan-morales.jpg")
         String pieFirmaUrl
 ) {

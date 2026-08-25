@@ -46,7 +46,7 @@ class SelloDirectorioServiceTest {
         BufferedImage imagen = new BufferedImage(10, 10, BufferedImage.TYPE_INT_RGB);
         DirectorioResponse esperado = new DirectorioResponse(
                 Ambito.SINDICATO, 4L, "LIBERTAD", "/api/v1/archivos/sellos/sello.png",
-                List.of());
+                false, false, true, List.of());
 
         when(sindicatos.buscar(4L)).thenReturn(sindicato);
         when(procesador.leer(subido)).thenReturn(imagen);

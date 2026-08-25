@@ -30,6 +30,15 @@ public record DirectorioResponse(
                 + "Null si todavía no se cargó.")
         String selloUrl,
 
+        @Schema(description = "Si este nivel permite cargar el pie de firma como imagen.")
+        boolean permitePieFirmaImagen,
+
+        @Schema(description = "Si la firma manuscrita bloquea la emisión cuando falta.")
+        boolean firmaObligatoria,
+
+        @Schema(description = "Si el sello institucional bloquea la emisión cuando falta.")
+        boolean selloObligatorio,
+
         @Schema(description = "Un puesto por cargo del nivel, en orden.")
         List<Puesto> puestos
 ) {

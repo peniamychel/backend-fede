@@ -98,6 +98,11 @@ public class CredencialDirigentePdf {
      * Dos páginas del tamaño exacto de la tarjeta, anverso y reverso.
      */
     public byte[] generar(CredencialDirigente credencial) {
+        return generar(credencial, CaraCredencial.COMPLETA);
+    }
+
+    /** Genera ambos lados o una sola página para impresoras sin dúplex. */
+    public byte[] generar(CredencialDirigente credencial, CaraCredencial cara) {
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
         Document documento = new Document(new Rectangle(ANCHO, ALTO), 0, 0, 0, 0);
         try {
@@ -105,13 +110,19 @@ public class CredencialDirigentePdf {
             documento.open();
             PdfContentByte lienzo = escritor.getDirectContent();
 
-            dibujarAnverso(lienzo, credencial);
-            // Sin esto la página se descarta: para el documento está vacía,
-            // porque todo se pintó directamente sobre la hoja.
-            escritor.setPageEmpty(false);
-            documento.newPage();
-            dibujarReverso(lienzo, credencial);
-            escritor.setPageEmpty(false);
+            if (cara != CaraCredencial.REVERSO) {
+                dibujarAnverso(lienzo, credencial);
+                // Sin esto la página se descarta: para el documento está vacía,
+                // porque todo se pintó directamente sobre la hoja.
+                escritor.setPageEmpty(false);
+            }
+            if (cara == CaraCredencial.COMPLETA) {
+                documento.newPage();
+            }
+            if (cara != CaraCredencial.ANVERSO) {
+                dibujarReverso(lienzo, credencial);
+                escritor.setPageEmpty(false);
+            }
 
             documento.close();
         } catch (DocumentException e) {

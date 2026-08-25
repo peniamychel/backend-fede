@@ -122,19 +122,22 @@ public class ProcesadorImagenes {
     /**
      * Genera un PNG de dimensiones libres manteniendo el canal alfa.
      * Sirve también para firmas y sellos preparados sin fondo en el cliente.
+     * El peso indicado es un objetivo: al alcanzar el lado mínimo se devuelve
+     * la mejor aproximación para no rechazar imágenes válidas muy detalladas.
      */
     public Variante generarPng(BufferedImage origen, int ladoMaximo, int pesoObjetivo) {
         int lado = Math.min(ladoMaximo, Math.max(origen.getWidth(), origen.getHeight()));
 
         while (true) {
             byte[] bytes = comprimirPng(origen, lado);
-            if (bytes.length <= pesoObjetivo) {
+            // El peso es un objetivo de optimización, no una condición para
+            // aceptar la foto. Un PNG con cabello, texturas o muchos bordes
+            // puede seguir superándolo incluso a 128 px porque la compresión
+            // es sin pérdida. En ese punto se conserva la mejor aproximación:
+            // una miniatura algo más pesada sigue siendo válida y no debe
+            // impedir que se guarde también la foto principal.
+            if (bytes.length <= pesoObjetivo || lado <= LADO_MINIMO_PNG) {
                 return describir(bytes, MIME_PNG);
-            }
-            if (lado <= LADO_MINIMO_PNG) {
-                throw new ArchivoInvalidoException(String.format(
-                        "La imagen PNG no pudo reducirse a %d KB sin perder demasiada calidad.",
-                        pesoObjetivo / 1024));
             }
             lado = Math.max(LADO_MINIMO_PNG, (int) (lado * 0.8));
         }

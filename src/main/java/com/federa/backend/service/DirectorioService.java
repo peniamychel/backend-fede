@@ -60,6 +60,7 @@ public class DirectorioService {
     private final FederacionService federacionService;
     private final ProductorService productorService;
     private final VetoRepository vetoRepository;
+    private final ReglasDirectorio reglas;
 
     public DirectorioService(CargoRepository cargoRepository,
                              ImagenCargoRepository imagenRepository,
@@ -69,7 +70,8 @@ public class DirectorioService {
                              CentralService centralService,
                              FederacionService federacionService,
                              ProductorService productorService,
-                             VetoRepository vetoRepository) {
+                             VetoRepository vetoRepository,
+                             ReglasDirectorio reglas) {
         this.cargoRepository = cargoRepository;
         this.imagenRepository = imagenRepository;
         this.productorRepository = productorRepository;
@@ -79,6 +81,7 @@ public class DirectorioService {
         this.federacionService = federacionService;
         this.productorService = productorService;
         this.vetoRepository = vetoRepository;
+        this.reglas = reglas;
     }
 
     // ------------------------------------------------------------ consulta
@@ -100,7 +103,15 @@ public class DirectorioService {
                                 .orElse(null)))
                 .toList();
 
-        return new DirectorioResponse(ambito, id, nombre, selloUrlDe(ambito, id), puestos);
+        return new DirectorioResponse(
+                ambito,
+                id,
+                nombre,
+                selloUrlDe(ambito, id),
+                reglas.permitePieFirmaImagen(ambito),
+                reglas.firmaObligatoria(ambito),
+                reglas.selloObligatorio(ambito),
+                puestos);
     }
 
     public List<CargoResponse> historial(Ambito ambito, Long id) {

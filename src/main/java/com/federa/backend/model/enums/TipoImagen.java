@@ -9,10 +9,10 @@ package com.federa.backend.model.enums;
  */
 public enum TipoImagen {
 
-    /** Versión chica para listados; transparente y casi imperceptible al descargar. */
+    /** Versión chica para listados; apunta a 30 KB sin rechazar PNG complejos. */
     MINIATURA("miniaturas", 128, 30 * 1024),
 
-    /** Foto cuadrada sin fondo, suficiente para la credencial y de hasta 300 KB. */
+    /** Foto cuadrada sin fondo, suficiente para la credencial; apunta a 300 KB. */
     ORIGINAL("originales", 600, 300 * 1024);
 
     private final String directorio;
