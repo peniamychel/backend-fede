@@ -8,6 +8,7 @@ import com.federa.backend.exception.ReglaNegocioException;
 import com.federa.backend.model.Lote;
 import com.federa.backend.model.Sistema;
 import com.federa.backend.model.TenenciaSistema;
+import com.federa.backend.model.enums.EstadoLote;
 import com.federa.backend.repository.SistemaRepository;
 import com.federa.backend.repository.TenenciaSistemaRepository;
 import com.federa.backend.util.Textos;
@@ -119,6 +120,7 @@ public class SistemaService {
 
         TenenciaSistema actual = tenenciaRepository
                 .findBySistemaIdAndVigenteIsTrue(sistemaId).orElse(null);
+        Lote loteAnterior = actual == null ? null : actual.getLote();
 
         if (actual != null) {
             if (loteId != null && actual.getLote().getId().equals(loteId)) {
@@ -140,6 +142,7 @@ public class SistemaService {
                 actual.setObservaciones(Textos.limpiar(peticion.observaciones()));
             }
             tenenciaRepository.saveAndFlush(actual);
+            clasificar(loteAnterior, EstadoLote.SIN_SISTEMA);
         } else if (loteId == null) {
             throw new ReglaNegocioException(
                     "El sistema " + sistema.getCodigo() + " no está en ningún lote.");
@@ -162,6 +165,7 @@ public class SistemaService {
             nueva.setObservaciones(Textos.limpiar(peticion.observaciones()));
             tenenciaRepository.save(nueva);
             sistema.getTenencias().add(nueva);
+            clasificar(lote, EstadoLote.CON_SISTEMA);
         }
 
         tenenciaRepository.flush();
@@ -179,6 +183,13 @@ public class SistemaService {
     }
 
     // ----------------------------------------------------------- auxiliares
+
+    /** Mantiene un solo significado para “Sistema” en toda la aplicación. */
+    private void clasificar(Lote lote, EstadoLote estado) {
+        lote.setEstadoLote(estado);
+        lote.setEstadoOriginal(estado.name());
+        loteService.recalcularCodigosDelGrupo(lote);
+    }
 
     private void verificarCodigoLibre(String codigo, Long idActual) {
         sistemaRepository.findByCodigoIgnoreCase(codigo)

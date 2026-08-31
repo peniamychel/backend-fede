@@ -1,6 +1,8 @@
 package com.federa.backend.service;
 
 import com.federa.backend.model.Productor;
+import com.federa.backend.exception.RecursoNoEncontradoException;
+import com.federa.backend.repository.CentralRepository;
 import com.federa.backend.repository.ProductorRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,9 +21,12 @@ import java.util.List;
 public class NumeradorPadron {
 
     private final ProductorRepository productorRepository;
+    private final CentralRepository centralRepository;
 
-    public NumeradorPadron(ProductorRepository productorRepository) {
+    public NumeradorPadron(ProductorRepository productorRepository,
+                           CentralRepository centralRepository) {
         this.productorRepository = productorRepository;
+        this.centralRepository = centralRepository;
     }
 
     /**
@@ -34,14 +39,19 @@ public class NumeradorPadron {
      * un padrón que se carga a mano, de a un productor por vez, no se da; si
      * alguna vez se carga en paralelo, esto hay que revisarlo.
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public int siguiente(Long centralId) {
         return siguiente(centralId, null);
     }
 
     /** El que sigue, sin contar a los productores de un sindicato. */
-    @Transactional(readOnly = true)
+    @Transactional
     public int siguiente(Long centralId, Long sindicatoExcluido) {
+        // El máximo y la posterior escritura del productor ocurren dentro de
+        // la misma transacción. Bloquear la central impide que dos altas
+        // simultáneas lean el mismo máximo y reciban el mismo código.
+        centralRepository.findByIdParaNumerar(centralId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("central", centralId));
         Integer maximo = productorRepository
                 .maxCorrelativoDeCentral(centralId, sindicatoExcluido);
         return admisible(maximo == null ? 1 : maximo + 1);

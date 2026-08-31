@@ -1,5 +1,6 @@
 package com.federa.backend.service;
 
+import com.federa.backend.almacen.AlmacenObjetos;
 import com.federa.backend.dto.CredencialProductor;
 import com.federa.backend.dto.DisenoCredencial;
 import com.lowagie.text.pdf.PdfReader;
@@ -18,10 +19,14 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Pruebas de la credencial.
@@ -42,7 +47,7 @@ class CredencialProductorPdfTest {
                                            CredencialProductor.Firmante secretario) {
         return new CredencialProductor(
                 "FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
-                "CANDIDO", "COLQUECHAMBI MAMANI", "3692655", "12-A",
+                "CANDIDO", "COLQUECHAMBI MAMANI", "3692655", "12 A",
                 foto, null, null, null, presidente, secretario, null,
                 "09/08/2026", "AB12CD34EF",
                 "2-1MO-7", qr());
@@ -183,13 +188,61 @@ class CredencialProductorPdfTest {
     }
 
     @Test
+    @DisplayName("el PDF usa la plantilla personalizada guardada")
+    void plantillaPersonalizada() throws IOException {
+        AlmacenObjetos almacen = mock(AlmacenObjetos.class);
+        String clave = DisenoCredencialService.clavePlantilla(DisenoCredencial.Cara.CARA);
+        BufferedImage fondo = new BufferedImage(856, 540, BufferedImage.TYPE_INT_RGB);
+        Graphics2D grafico = fondo.createGraphics();
+        grafico.setColor(new Color(35, 90, 145));
+        grafico.fillRect(0, 0, fondo.getWidth(), fondo.getHeight());
+        grafico.dispose();
+        when(almacen.existe(clave)).thenReturn(true);
+        when(almacen.leer(clave)).thenReturn(aPng(fondo));
+
+        byte[] pdf = new CredencialProductorPdf(almacen).generar(
+                credencial(null, null, null),
+                DisenoCredencial.porDefecto(),
+                CaraCredencial.ANVERSO);
+
+        assertThat(pdf).isNotEmpty();
+        verify(almacen).leer(clave);
+    }
+
+    @Test
+    @DisplayName("el PDF lee las imágenes agregadas como objetos del diseño")
+    void imagenPersonalizada() throws IOException {
+        AlmacenObjetos almacen = mock(AlmacenObjetos.class);
+        String recurso = "configuracion/credencial/objetos/123e4567-e89b-12d3-a456-426614174000.png";
+        when(almacen.existe(recurso)).thenReturn(true);
+        when(almacen.leer(recurso)).thenReturn(selloDe("IMAGEN", "PERSONALIZADA"));
+
+        DisenoCredencial base = DisenoCredencial.porDefecto();
+        List<DisenoCredencial.Elemento> elementos = new ArrayList<>(base.elementos());
+        elementos.add(new DisenoCredencial.Elemento(
+                "imagen-personalizada", DisenoCredencial.Cara.CARA,
+                DisenoCredencial.Tipo.IMAGEN, DisenoCredencial.CAMPO_IMAGEN_PERSONALIZADA,
+                "Imagen personalizada", 20f, 20f, 60f, 40f, 5.5f, false,
+                DisenoCredencial.Alineacion.CENTRO, "#000000", "",
+                DisenoCredencial.Fuente.ROBOTO, recurso));
+
+        byte[] pdf = new CredencialProductorPdf(almacen).generar(
+                credencial(null, null, null),
+                new DisenoCredencial(base.ancho(), base.alto(), elementos),
+                CaraCredencial.ANVERSO);
+
+        assertThat(pdf).isNotEmpty();
+        verify(almacen).leer(recurso);
+    }
+
+    @Test
     @DisplayName("el anverso lleva los datos del productor")
     void anversoConDatos() throws IOException {
         String anverso = texto(generador.generar(credencial(null, null, null)), 1);
 
         assertThat(anverso)
                 .contains("CANDIDO COLQUECHAMBI MAMANI")
-                .contains("12-A")
+                .contains("12 A")
                 .contains("ALTO SAN SALVADOR")
                 .contains("1RO MAYO")
                 .contains("CARRASCO")
@@ -210,7 +263,7 @@ class CredencialProductorPdfTest {
 
         assertThat(anverso).doesNotContain("N° PRODUCTOR");
         // El rótulo está en la imagen de fondo; el valor variable sigue estando.
-        assertThat(anverso).contains("12-A");
+        assertThat(anverso).contains("12 A");
     }
 
     @Test
@@ -322,13 +375,34 @@ class CredencialProductorPdfTest {
                 "ci-agregada", DisenoCredencial.Cara.CARA,
                 DisenoCredencial.Tipo.TEXTO, "CI", "Cédula de identidad",
                 12f, 12f, 70f, 8f, 8f, true,
-                DisenoCredencial.Alineacion.IZQUIERDA, "#000000", ""));
+                DisenoCredencial.Alineacion.IZQUIERDA, "#000000", "",
+                DisenoCredencial.Fuente.ROBOTO, null));
 
         DisenoCredencial editado = new DisenoCredencial(base.ancho(), base.alto(), elementos);
         String anverso = texto(generador.generar(
                 credencial(null, null, null), editado), 1);
 
         assertThat(anverso).contains("3692655");
+    }
+
+    @Test
+    @DisplayName("el PDF incrusta la familia elegida en el editor")
+    void fuenteElegida() {
+        DisenoCredencial base = DisenoCredencial.porDefecto();
+        List<DisenoCredencial.Elemento> elementos = new ArrayList<>(base.elementos());
+        elementos.add(new DisenoCredencial.Elemento(
+                "nombre-montserrat", DisenoCredencial.Cara.CARA,
+                DisenoCredencial.Tipo.TEXTO, "NOMBRE_COMPLETO", "Nombre Montserrat",
+                12f, 12f, 120f, 10f, 9f, true,
+                DisenoCredencial.Alineacion.IZQUIERDA, "#000000", "",
+                DisenoCredencial.Fuente.MONTSERRAT, null));
+
+        byte[] pdf = generador.generar(credencial(null, null, null),
+                new DisenoCredencial(base.ancho(), base.alto(), elementos),
+                CaraCredencial.ANVERSO);
+
+        assertThat(new String(pdf, StandardCharsets.ISO_8859_1))
+                .contains("Montserrat");
     }
 
     @Test
@@ -339,7 +413,7 @@ class CredencialProductorPdfTest {
         // circula en papel, no va nada.
         CredencialProductor sinCodigo = new CredencialProductor(
                 "FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
-                "CANDIDO", "COLQUECHAMBI MAMANI", "3692655", "12-A",
+                "CANDIDO", "COLQUECHAMBI MAMANI", "3692655", "12 A",
                 null, null, null, "09/08/2026", "AB12CD34EF", null, qr());
 
         String anverso = texto(generador.generar(sinCodigo), 1);
@@ -397,6 +471,41 @@ class CredencialProductorPdfTest {
     }
 
     @Test
+    @DisplayName("la impresión masiva genera una página CR80 por tarjeta y por una sola cara")
+    void tarjetasParaZebra() throws IOException {
+        List<CredencialProductor> tanda = List.of(
+                credencial(null, null, null),
+                new CredencialProductor(
+                        "FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
+                        "MARÍA", "PÉREZ", "8000002", "22 B",
+                        null, null, null, "09/08/2026", "SEGUNDAQR",
+                        "2-1MO-22 B", qr()));
+
+        byte[] caras = generador.generarTarjetas(
+                tanda, DisenoCredencial.porDefecto(), CaraCredencial.ANVERSO);
+        byte[] reversos = generador.generarTarjetas(
+                tanda, DisenoCredencial.porDefecto(), CaraCredencial.REVERSO);
+
+        PdfReader lectorCaras = new PdfReader(caras);
+        PdfReader lectorReversos = new PdfReader(reversos);
+        try {
+            assertThat(lectorCaras.getNumberOfPages()).isEqualTo(2);
+            assertThat(lectorReversos.getNumberOfPages()).isEqualTo(2);
+            assertThat(lectorCaras.getPageSize(1).getWidth())
+                    .isCloseTo(CredencialProductorPdf.ANCHO,
+                            org.assertj.core.data.Offset.offset(0.1f));
+            assertThat(lectorCaras.getPageSize(1).getHeight())
+                    .isCloseTo(CredencialProductorPdf.ALTO,
+                            org.assertj.core.data.Offset.offset(0.1f));
+        } finally {
+            lectorCaras.close();
+            lectorReversos.close();
+        }
+        assertThat(texto(caras, 1)).contains("CANDIDO");
+        assertThat(texto(caras, 2)).contains("MARÍA");
+    }
+
+    @Test
     @DisplayName("el reverso de cada tarjeta cae detrás de su anverso al voltear la hoja")
     void reversosEspejados() {
         float hoja = com.lowagie.text.PageSize.LETTER.getWidth();
@@ -451,7 +560,7 @@ class CredencialProductorPdfTest {
 
         CredencialProductor muestra = new CredencialProductor(
                 "FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
-                "CANDIDO", "COLQUECHAMBI MAMANI", "3692655", "12-A", retratoSinFondo(),
+                "CANDIDO", "COLQUECHAMBI MAMANI", "3692655", "12 A", retratoSinFondo(),
                 selloDe("FEDERACIÓN", "CARRASCO"), selloDe("CENTRAL", "1RO MAYO"),
                 selloDe("SINDICATO", "ALTO SAN SALVADOR"), ejecutivo,
                 secretarioCentral, secretarioSindicato, "09/08/2026", "AB12CD34EF",

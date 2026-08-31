@@ -33,4 +33,11 @@ public interface ImagenCargoRepository extends JpaRepository<ImagenCargo, Long> 
             where i.cargo.productor.id = :productorId
             """)
     List<String> findClavesPorProductor(@Param("productorId") Long productorId);
+
+    @Query("""
+            select i.originalClave from ImagenCargo i
+            where i.cargo.productor.id = :productorId
+              and i.originalClave is not null
+            """)
+    List<String> findClavesOriginalesPorProductor(@Param("productorId") Long productorId);
 }

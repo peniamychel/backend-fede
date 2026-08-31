@@ -59,6 +59,10 @@ public class ImagenCargo extends EntidadAuditable {
     @Column(name = "nombre_original", length = 160)
     private String nombreOriginal;
 
+    /** Copia editable, comprimida como JPEG a un máximo de 300 KB. */
+    @Column(name = "original_clave", length = 200)
+    private String originalClave;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "cargo_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_imagen_cargo"))

@@ -16,6 +16,7 @@ import com.federa.backend.model.enums.EstadoLote;
 import com.federa.backend.model.enums.ExtensionLote;
 import com.federa.backend.model.enums.Mercado;
 import com.federa.backend.repository.LoteRepository;
+import com.federa.backend.repository.ProductorRepository;
 import com.federa.backend.repository.TenenciaLoteRepository;
 import com.federa.backend.repository.TenenciaSistemaRepository;
 import com.federa.backend.util.Textos;
@@ -23,9 +24,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Lotes y su tenencia.
@@ -42,19 +47,29 @@ public class LoteService {
     private final LoteRepository loteRepository;
     private final TenenciaLoteRepository tenenciaRepository;
     private final TenenciaSistemaRepository tenenciaSistemaRepository;
+    private final ProductorRepository productorRepository;
     private final ProductorService productorService;
     private final SindicatoService sindicatoService;
+    private final NumeradorPadron numerador;
+
+    private static final String[] LETRAS_COMPARTIDAS = {
+            "A", "B", "C", "D", "E", "F", "G", "H"
+    };
 
     public LoteService(LoteRepository loteRepository,
                        TenenciaLoteRepository tenenciaRepository,
                        TenenciaSistemaRepository tenenciaSistemaRepository,
+                       ProductorRepository productorRepository,
                        ProductorService productorService,
-                       SindicatoService sindicatoService) {
+                       SindicatoService sindicatoService,
+                       NumeradorPadron numerador) {
         this.loteRepository = loteRepository;
         this.tenenciaRepository = tenenciaRepository;
         this.tenenciaSistemaRepository = tenenciaSistemaRepository;
+        this.productorRepository = productorRepository;
         this.productorService = productorService;
         this.sindicatoService = sindicatoService;
+        this.numerador = numerador;
     }
 
     // ------------------------------------------------------------- consulta
@@ -105,6 +120,119 @@ public class LoteService {
         return conTenenciaYSistema(loteRepository.findConEstadoDesconocido());
     }
 
+    /**
+     * Repara clasificaciones que una versión anterior recibió con el nombre
+     * oficial de la API (`CON_SISTEMA`/`SIN_SISTEMA`) pero dejó como
+     * DESCONOCIDO. El texto original permite hacerlo sin adivinar datos.
+     */
+    @Transactional
+    public int normalizarClasificacionesExistentes() {
+        int corregidos = 0;
+        for (Lote lote : loteRepository.findConEstadoDesconocido()) {
+            EstadoLote normalizado = EstadoLote.desde(lote.getEstadoOriginal());
+            if (normalizado != null && normalizado != EstadoLote.DESCONOCIDO) {
+                lote.setEstadoLote(normalizado);
+                corregidos++;
+            }
+        }
+        if (corregidos > 0) {
+            loteRepository.flush();
+        }
+        return corregidos;
+    }
+
+    /**
+     * Aplica A-H también a los números repetidos que ya estaban en el padrón
+     * antes de incorporar esta regla. El correlativo no se toca: identifica al
+     * productor dentro de su central y es independiente del lote.
+     *
+     * @return cantidad de grupos repetidos normalizados
+     */
+    @Transactional
+    public int normalizarCodigosCompartidosExistentes() {
+        Map<GrupoLote, List<TenenciaLote>> grupos = new LinkedHashMap<>();
+        for (TenenciaLote tenencia : tenenciaRepository.findVigentesConNumero()) {
+            Lote lote = tenencia.getLote();
+            GrupoLote clave = new GrupoLote(
+                    lote.getSindicato().getId(),
+                    lote.getNumero().trim().toUpperCase(java.util.Locale.ROOT));
+            grupos.computeIfAbsent(clave, ignorada -> new java.util.ArrayList<>())
+                    .add(tenencia);
+        }
+
+        int repetidos = 0;
+        for (List<TenenciaLote> grupo : grupos.values()) {
+            boolean requiereRevision = grupo.size() > 1
+                    || grupo.get(0).getProductor().getLetraCodigo() != null;
+            if (requiereRevision) {
+                recalcularCodigosDelGrupo(grupo.get(0).getLote());
+            }
+            if (grupo.size() > 1) {
+                repetidos++;
+            }
+        }
+        loteRepository.flush();
+        return repetidos;
+    }
+
+    /**
+     * Corrige la versión anterior, que copiaba el correlativo de A a B-H.
+     *
+     * <p>Solo se renumeran productores con letra B-H cuyo correlativo todavía
+     * está duplicado dentro de su central. A, quienes no tienen letra y los
+     * B-H que ya son únicos quedan intactos. Es idempotente: una segunda
+     * ejecución no encuentra nada que corregir.</p>
+     */
+    @Transactional
+    public int corregirCorrelativosDuplicadosDeLotesCompartidos() {
+        List<TenenciaLote> tenencias = new ArrayList<>(
+                tenenciaRepository.findVigentesConNumero());
+        tenencias.sort(Comparator.comparing(TenenciaLote::getId));
+
+        Map<Long, List<Productor>> candidatosPorCentral = new LinkedHashMap<>();
+        for (TenenciaLote tenencia : tenencias) {
+            Productor productor = tenencia.getProductor();
+            String letra = productor.getLetraCodigo();
+            if (letra == null || "A".equalsIgnoreCase(letra)) {
+                continue;
+            }
+            Long centralId = productor.getSindicato().getCentral().getId();
+            candidatosPorCentral.computeIfAbsent(centralId, ignorada -> new ArrayList<>())
+                    .add(productor);
+        }
+
+        int corregidos = 0;
+        for (Map.Entry<Long, List<Productor>> entrada : candidatosPorCentral.entrySet()) {
+            Long centralId = entrada.getKey();
+            List<Productor> productoresCentral =
+                    productorRepository.findBySindicatoCentralIdOrderByApellidosAscNombresAsc(
+                            centralId);
+            Map<Integer, Integer> repeticiones = new HashMap<>();
+            for (Productor productor : productoresCentral) {
+                if (productor.getCorrelativo() != null) {
+                    repeticiones.merge(productor.getCorrelativo(), 1, Integer::sum);
+                }
+            }
+
+            int siguiente = numerador.siguiente(centralId);
+            for (Productor productor : entrada.getValue()) {
+                Integer anterior = productor.getCorrelativo();
+                if (anterior == null || repeticiones.getOrDefault(anterior, 0) < 2) {
+                    continue;
+                }
+                productor.setCorrelativo(siguiente);
+                repeticiones.computeIfPresent(anterior, (numero, cantidad) -> cantidad - 1);
+                repeticiones.put(siguiente, 1);
+                siguiente = NumeradorPadron.despuesDe(siguiente);
+                corregidos++;
+            }
+        }
+        if (corregidos > 0) {
+            productorRepository.flush();
+        }
+        return corregidos;
+    }
+
     // -------------------------------------------------------------- cambios
 
     /**
@@ -129,6 +257,8 @@ public class LoteService {
             verificarMismoSindicato(productor, lote);
             verificarSinParcela(productor);
             tenenciaRepository.save(productor.tomarLote(lote, LocalDate.now()));
+            tenenciaRepository.flush();
+            recalcularCodigosDelGrupo(lote);
         }
 
         loteRepository.flush();
@@ -147,8 +277,33 @@ public class LoteService {
                     "Un lote no se muda de sindicato: la tierra no se mueve. Si el lote está "
                     + "mal ubicado, corregilo desde la base o dalo de baja y cargalo bien.");
         }
+        String numeroAnterior = lote.getNumero();
+        String numeroNuevo = Textos.limpiar(request.numero());
+        boolean cambiaNumero = !Objects.equals(numeroAnterior, numeroNuevo);
+        boolean cambiaPrioridadSistema =
+                (lote.getEstadoLote() == EstadoLote.CON_SISTEMA)
+                != (EstadoLote.desde(request.estado()) == EstadoLote.CON_SISTEMA);
+
+        Lote grupoAnterior = cambiaNumero
+                ? referenciaDeGrupo(lote, numeroAnterior)
+                : null;
+
         aplicar(lote, request);
         loteRepository.flush();
+
+        if (cambiaNumero) {
+            // Cambiar de lote solo afecta la letra A-H. El código pertenece al
+            // productor y debe seguir siendo el mismo.
+            recalcularCodigosDelGrupo(grupoAnterior);
+            recalcularCodigosDelGrupo(lote);
+            loteRepository.flush();
+        } else if (cambiaPrioridadSistema) {
+            // La letra A corresponde primero a quien está clasificado con
+            // sistema, aunque esa clasificación se haya cambiado después de
+            // formar el grupo compartido.
+            recalcularCodigosDelGrupo(lote);
+            loteRepository.flush();
+        }
         return LoteResponse.desde(lote);
     }
 
@@ -166,6 +321,7 @@ public class LoteService {
 
         TenenciaLote actual = tenenciaRepository.findByLoteIdAndVigenteIsTrue(loteId)
                 .orElse(null);
+        Productor anterior = actual == null ? null : actual.getProductor();
 
         if (actual != null) {
             if (peticion.productorId() != null
@@ -204,6 +360,8 @@ public class LoteService {
             tenenciaRepository.save(nueva);
         }
 
+        tenenciaRepository.flush();
+        recalcularCodigosDelGrupo(lote);
         loteRepository.flush();
         return LoteResponse.desde(buscar(loteId));
     }
@@ -241,6 +399,14 @@ public class LoteService {
     @Transactional
     public void eliminar(Long id) {
         Lote lote = buscar(id);
+        TenenciaLote tenencia = tenenciaRepository.findByLoteIdAndVigenteIsTrue(id)
+                .orElse(null);
+        if (tenencia != null) {
+            throw new ReglaNegocioException(String.format(
+                    "No se puede eliminar el lote %s porque está asignado a %s. "
+                    + "Primero dejalo sin tenedor.",
+                    lote.getCodigo(), tenencia.getProductor().getNombreCompleto()));
+        }
         if (tenenciaSistemaRepository.findByLoteIdAndVigenteIsTrue(id).isPresent()) {
             throw new ReglaNegocioException("El lote " + lote.getCodigo() + " tiene un sistema "
                     + "instalado. Trasladalo a otro lote antes de dar de baja la parcela.");
@@ -291,6 +457,57 @@ public class LoteService {
                     + "Traspasá la que tiene antes de darle esta.",
                     productor.getNombreCompleto()));
         }
+    }
+
+    /**
+     * Coordina la letra del lote entre los productores que comparten número
+     * dentro del mismo sindicato.
+     * <p>
+     * Con uno solo no hay letra. Desde dos se reparten A-H dando prioridad a
+     * las participaciones clasificadas con sistema. Dentro de la misma
+     * prioridad se conserva el orden de tenencia. El correlativo nunca cambia:
+     * es el código único del productor dentro de la central, no parte de la
+     * clasificación del lote.
+     */
+    void recalcularCodigosDelGrupo(Lote lote) {
+        if (lote.getNumero() == null || lote.getNumero().isBlank()) {
+            return;
+        }
+        List<TenenciaLote> grupo = new ArrayList<>(
+                tenenciaRepository.findVigentesDelNumero(
+                        lote.getSindicato().getId(), lote.getNumero()));
+        if (grupo.size() > LETRAS_COMPARTIDAS.length) {
+            throw new ReglaNegocioException(String.format(
+                    "El lote %s ya alcanzó el máximo de %d productores (letras A-H).",
+                    lote.getCodigo(), LETRAS_COMPARTIDAS.length));
+        }
+        if (grupo.isEmpty()) {
+            return;
+        }
+        if (grupo.size() == 1) {
+            grupo.get(0).getProductor().setLetraCodigo(null);
+            return;
+        }
+
+        grupo.sort(Comparator
+                .comparingInt((TenenciaLote t) ->
+                        t.getLote().getEstadoLote() == EstadoLote.CON_SISTEMA ? 0 : 1)
+                .thenComparing(TenenciaLote::getId));
+
+        for (int i = 0; i < grupo.size(); i++) {
+            Productor productor = grupo.get(i).getProductor();
+            productor.setLetraCodigo(LETRAS_COMPARTIDAS[i]);
+        }
+    }
+
+    private record GrupoLote(Long sindicatoId, String numero) {
+    }
+
+    private Lote referenciaDeGrupo(Lote origen, String numero) {
+        Lote referencia = new Lote();
+        referencia.setSindicato(origen.getSindicato());
+        referencia.setNumero(numero);
+        return referencia;
     }
 
     /**

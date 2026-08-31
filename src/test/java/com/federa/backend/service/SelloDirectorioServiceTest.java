@@ -53,6 +53,9 @@ class SelloDirectorioServiceTest {
         when(procesador.generarPng(eq(imagen), anyInt(), anyInt()))
                 .thenReturn(new ProcesadorImagenes.Variante(
                         reducido, 10, 10, "image/png"));
+        when(procesador.prepararOriginalEditable(subido))
+                .thenReturn(new ProcesadorImagenes.Variante(
+                        new byte[]{8, 9}, 10, 10, "image/jpeg"));
         when(directorio.obtener(Ambito.SINDICATO, 4L)).thenReturn(esperado);
 
         DirectorioResponse respuesta = servicio.guardar(Ambito.SINDICATO, 4L, subido);
@@ -61,6 +64,9 @@ class SelloDirectorioServiceTest {
         assertThat(sindicato.getSelloClave())
                 .startsWith("sellos/sindicato-4-")
                 .endsWith("-libertad.png");
+        assertThat(sindicato.getSelloOriginalClave())
+                .startsWith("originales-directorio/sellos/sindicato-4-")
+                .endsWith("-libertad.jpg");
         verify(almacen).guardar(sindicato.getSelloClave(), reducido);
         verify(sindicatoRepository).flush();
     }

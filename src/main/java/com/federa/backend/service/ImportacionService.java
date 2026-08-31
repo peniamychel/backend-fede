@@ -8,6 +8,7 @@ import com.federa.backend.model.Federacion;
 import com.federa.backend.model.Lote;
 import com.federa.backend.model.Productor;
 import com.federa.backend.model.Sindicato;
+import com.federa.backend.model.enums.EstadoLote;
 import com.federa.backend.repository.CentralRepository;
 import com.federa.backend.repository.LoteRepository;
 import com.federa.backend.repository.ProductorRepository;
@@ -27,6 +28,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Comparator;
 
 /**
  * Carga masiva del padrón desde la planilla MATRIX.
@@ -45,6 +47,8 @@ public class ImportacionService {
     private static final int MAX_NOMBRE = 60;
     private static final int MAX_CI = 20;
     private static final int MAX_LOTE = 20;
+    private static final Set<String> EXTENSIONES_REFERENCIA = Set.of(
+            "A", "B", "C", "D", "E", "F", "G", "H");
 
     private final LectorPlanilla lector;
     private final FederacionService federacionService;
@@ -53,6 +57,7 @@ public class ImportacionService {
     private final ProductorRepository productorRepository;
     private final LoteRepository loteRepository;
     private final NumeradorPadron numerador;
+    private final LoteService loteService;
     private final TransactionTemplate transacciones;
 
     public ImportacionService(LectorPlanilla lector,
@@ -62,6 +67,7 @@ public class ImportacionService {
                               ProductorRepository productorRepository,
                               LoteRepository loteRepository,
                               NumeradorPadron numerador,
+                              LoteService loteService,
                               PlatformTransactionManager gestorTransacciones) {
         this.lector = lector;
         this.federacionService = federacionService;
@@ -70,12 +76,14 @@ public class ImportacionService {
         this.productorRepository = productorRepository;
         this.loteRepository = loteRepository;
         this.numerador = numerador;
+        this.loteService = loteService;
         this.transacciones = new TransactionTemplate(gestorTransacciones);
     }
 
     /**
      * @param simular               si es true no se persiste nada
-     * @param crearJerarquia        da de alta las centrales y sindicatos que falten
+     * @param crearJerarquia        aprueba dar de alta los sindicatos que falten; las centrales
+     *                              nunca se crean durante una importación
      * @param ignorarFilasConError  importa las filas válidas aunque otras fallen
      */
     public ImportacionResponse importar(InputStream archivo, Long federacionId, boolean simular,
@@ -119,6 +127,9 @@ public class ImportacionService {
 
         /** Centrales de la federación por nombre normalizado. */
         private final Map<String, Central> centrales = new HashMap<>();
+
+        /** Centrales por sigla, para impedir que nombre y abreviatura apunten a dos distintas. */
+        private final Map<String, Central> centralesPorAbreviatura = new HashMap<>();
 
         /** Sindicatos por "centralId|nombre": el nombre solo no identifica a ninguno. */
         private final Map<String, Sindicato> sindicatos = new HashMap<>();
@@ -164,7 +175,11 @@ public class ImportacionService {
          */
         private void precargar() {
             for (Central central : centralRepository.findByFederacionIdOrderByNombreAsc(federacionId)) {
-                centrales.put(central.getNombre(), central);
+                centrales.put(Textos.normalizar(central.getNombre()), central);
+                String abreviatura = Textos.normalizar(central.getAbreviatura());
+                if (abreviatura != null) {
+                    centralesPorAbreviatura.put(abreviatura, central);
+                }
                 for (Sindicato sindicato : sindicatoRepository
                         .findByCentralIdOrderByNombreAsc(central.getId())) {
                     sindicatos.put(claveSindicato(central.getId(), sindicato.getNombre()), sindicato);
@@ -183,12 +198,15 @@ public class ImportacionService {
         }
 
         private void procesar(LectorPlanilla.Fila fila) {
-            String nombreCentral = Textos.normalizar(fila.central());
-            String nombreSindicato = Textos.normalizar(fila.sindicato());
-            String nombres = Textos.normalizar(fila.nombres());
-            String apellidos = Textos.normalizar(fila.apellidos());
+            String nombreCentral = Textos.normalizarParaGuardar(fila.central());
+            String abreviatura = Textos.normalizar(fila.abreviatura());
+            String nombreSindicato = Textos.normalizarParaGuardar(fila.sindicato());
+            String nombres = Textos.normalizarParaGuardar(fila.nombres());
+            String apellidos = Textos.normalizarParaGuardar(fila.apellidos());
             String ci = Textos.limpiar(fila.ci());
             String numeroLote = Textos.limpiar(fila.numeroLote());
+            String extensionReferencia = Textos.normalizar(fila.extension());
+            EstadoLote clasificacion = clasificacionImportada(fila.clasificacion());
 
             if (nombreCentral == null) {
                 rechazar(fila, "central", fila.central(), "la central es obligatoria");
@@ -218,32 +236,67 @@ public class ImportacionService {
                         "el número de lote supera los " + MAX_LOTE + " caracteres");
                 return;
             }
+            if (abreviatura != null && (abreviatura.length() > 3
+                    || !abreviatura.matches("[A-Z0-9]+"))) {
+                rechazar(fila, "abreviatura", fila.abreviatura(),
+                        "la abreviatura debe tener hasta 3 letras o números");
+                return;
+            }
+            if (extensionReferencia != null
+                    && !EXTENSIONES_REFERENCIA.contains(extensionReferencia)) {
+                rechazar(fila, "extension", fila.extension(),
+                        "la extensión solo puede ser una letra entre A y H");
+                return;
+            }
+            if (fila.clasificacion() != null && clasificacion == null) {
+                rechazar(fila, "clasificacion", fila.clasificacion(),
+                        "la clasificación debe ser SIN SISTEMA, SISTEMA, BLANCO, "
+                                + "FRACCIONADO, DETALLISTA o COMUNITARIO");
+                return;
+            }
 
-            Central central = centrales.get(nombreCentral);
+            Central central = centrales.get(Textos.normalizar(nombreCentral));
             if (central == null) {
-                if (!crearJerarquia) {
-                    rechazar(fila, "central", nombreCentral,
-                            "la central " + nombreCentral + " no existe en la federación "
-                                    + federacion.getNombre());
+                centralesNuevas.add(nombreCentral);
+                String detalleAbreviatura = abreviatura == null
+                        ? " y asignarle su abreviatura"
+                        : " con la abreviatura " + abreviatura;
+                rechazar(fila, "central", nombreCentral,
+                        "la central " + nombreCentral + " no está registrada en "
+                                + federacion.getNombre() + ". Debés crearla manualmente"
+                                + detalleAbreviatura + " antes de importar estas filas");
+                return;
+            }
+
+            if (abreviatura != null) {
+                Central dueñaDeAbreviatura = centralesPorAbreviatura.get(abreviatura);
+                String abreviaturaRegistrada = Textos.normalizar(central.getAbreviatura());
+                if (abreviaturaRegistrada == null) {
+                    rechazar(fila, "abreviatura", fila.abreviatura(),
+                            "la central " + central.getNombre() + " todavía no tiene abreviatura. "
+                                    + "Asignale " + abreviatura + " manualmente antes de importar");
                     return;
                 }
-                central = new Central();
-                central.setNombre(nombreCentral);
-                central.setFederacion(federacion);
-                central = centralRepository.save(central);
-                centrales.put(nombreCentral, central);
-                // Anotarla acá y no después: este es el único punto donde se
-                // sabe con certeza que no venía de la precarga.
-                centralesNuevas.add(nombreCentral);
+                if (!abreviatura.equals(abreviaturaRegistrada)) {
+                    String detalle = dueñaDeAbreviatura == null
+                            ? "la abreviatura registrada es " + abreviaturaRegistrada
+                            : "esa abreviatura pertenece a " + dueñaDeAbreviatura.getNombre();
+                    rechazar(fila, "abreviatura", fila.abreviatura(),
+                            "la abreviatura no corresponde a " + central.getNombre() + ": "
+                                    + detalle);
+                    return;
+                }
             }
 
             String claveSind = claveSindicato(central.getId(), nombreSindicato);
             Sindicato sindicato = sindicatos.get(claveSind);
             if (sindicato == null) {
+                sindicatosNuevos.putIfAbsent(claveSind,
+                        new SindicatoNuevo(nombreCentral, nombreSindicato));
                 if (!crearJerarquia) {
                     rechazar(fila, "sindicato", nombreSindicato,
-                            "el sindicato " + nombreSindicato + " no existe en la central "
-                                    + nombreCentral);
+                            "el sindicato " + nombreSindicato + " todavía no existe en la central "
+                                    + nombreCentral + " y no fue aprobado para crearse");
                     return;
                 }
                 sindicato = new Sindicato();
@@ -251,14 +304,13 @@ public class ImportacionService {
                 sindicato.setCentral(central);
                 sindicato = sindicatoRepository.save(sindicato);
                 sindicatos.put(claveSind, sindicato);
-                sindicatosNuevos.putIfAbsent(claveSind,
-                        new SindicatoNuevo(nombreCentral, nombreSindicato));
             }
 
             Productor productor = new Productor();
             productor.setNombres(nombres);
             productor.setApellidos(apellidos);
             productor.setCi(ci);
+            productor.setRevisionSiePendiente(true);
             productor.setSindicato(sindicato);
             productor.setCorrelativo(numerarEn(central));
 
@@ -275,8 +327,18 @@ public class ImportacionService {
                 Lote lote = new Lote();
                 lote.setNumero(numeroLote);
                 lote.setSindicato(sindicato);
+                EstadoLote clasificacionDefinitiva = clasificacion == null
+                        ? EstadoLote.SIN_SISTEMA
+                        : clasificacion;
+                lote.setEstadoLote(clasificacionDefinitiva);
+                lote.setEstadoOriginal(clasificacionDefinitiva == EstadoLote.CON_SISTEMA
+                        ? "SISTEMA"
+                        : clasificacionDefinitiva.name().replace('_', ' '));
+                // EXTENSION es solo una referencia del archivo. No se escribe
+                // en Lote.extension: la letra visible se recalcula para todo el
+                // grupo y puede cambiar si uno de sus miembros tiene SISTEMA.
                 nuevosLotes.add(lote);
-                porEntregar.add(new Entrega(productor, lote));
+                porEntregar.add(new Entrega(productor, lote, extensionReferencia, fila.numero()));
                 lotes++;
             }
 
@@ -321,13 +383,31 @@ public class ImportacionService {
             productorRepository.saveAll(aGuardar);
 
             LocalDate hoy = LocalDate.now();
-            for (Entrega entrega : porEntregar) {
+            List<Entrega> entregasOrdenadas = porEntregar.stream()
+                    .sorted(Comparator
+                            .comparing((Entrega e) -> claveGrupo(e.lote()))
+                            .thenComparingInt(e -> e.lote().getEstadoLote()
+                                    == EstadoLote.CON_SISTEMA ? 0 : 1)
+                            .thenComparingInt(e -> ordenExtension(e.extensionReferencia()))
+                            .thenComparingInt(Entrega::fila))
+                    .toList();
+            Map<String, Lote> grupos = new LinkedHashMap<>();
+            for (Entrega entrega : entregasOrdenadas) {
                 entrega.productor().tomarLote(entrega.lote(), hoy);
+                grupos.putIfAbsent(claveGrupo(entrega.lote()), entrega.lote());
             }
 
             // Fuerza los INSERT ahora: si alguna restricción de la base se
             // rompe, que falle acá dentro de la transacción y no al confirmar,
             // cuando ya no se puede informar bien.
+            productorRepository.flush();
+
+            // Aplica la misma regla que usa el alta manual: un solo productor
+            // queda sin letra; desde dos se asigna A-H, con SISTEMA primero.
+            // También considera los productores que ya estaban en la base.
+            for (Lote referencia : grupos.values()) {
+                loteService.recalcularCodigosDelGrupo(referencia);
+            }
             productorRepository.flush();
         }
 
@@ -362,15 +442,43 @@ public class ImportacionService {
         }
 
         private String claveSindicato(Long centralId, String nombre) {
-            return centralId + "|" + nombre;
+            return centralId + "|" + Textos.normalizar(nombre);
         }
 
         private String claveIdentidad(Long sindicatoId, String nombres, String apellidos) {
-            return sindicatoId + "|" + nombres + "|" + (apellidos == null ? "" : apellidos);
+            return sindicatoId + "|" + Textos.normalizar(nombres) + "|"
+                    + (apellidos == null ? "" : Textos.normalizar(apellidos));
+        }
+
+        private String claveGrupo(Lote lote) {
+            return lote.getSindicato().getId() + "|" + Textos.normalizar(lote.getNumero());
         }
     }
 
     /** Un productor de la planilla y el lote que la planilla le pone. */
-    private record Entrega(Productor productor, Lote lote) {
+    private record Entrega(Productor productor, Lote lote, String extensionReferencia, int fila) {
+    }
+
+    static EstadoLote clasificacionImportada(String valor) {
+        String normalizada = Textos.normalizar(valor);
+        if (normalizada == null) {
+            return null;
+        }
+        return switch (normalizada) {
+            case "SISTEMA" -> EstadoLote.CON_SISTEMA;
+            case "SIN SISTEMA" -> EstadoLote.SIN_SISTEMA;
+            case "BLANCO" -> EstadoLote.BLANCO;
+            case "FRACCIONADO" -> EstadoLote.FRACCIONADO;
+            case "DETALLISTA" -> EstadoLote.DETALLISTA;
+            case "COMUNITARIO" -> EstadoLote.COMUNITARIO;
+            default -> null;
+        };
+    }
+
+    private static int ordenExtension(String extension) {
+        if (extension == null || extension.isBlank()) {
+            return EXTENSIONES_REFERENCIA.size();
+        }
+        return extension.charAt(0) - 'A';
     }
 }

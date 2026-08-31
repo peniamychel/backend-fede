@@ -77,6 +77,9 @@ public class Central extends EntidadAuditable {
     @Column(name = "sello_clave", length = 200)
     private String selloClave;
 
+    @Column(name = "sello_original_clave", length = 200)
+    private String selloOriginalClave;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "federacion_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_central_federacion"))

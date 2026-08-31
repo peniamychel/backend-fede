@@ -6,6 +6,8 @@ import com.federa.backend.model.TenenciaSistema;
 import com.federa.backend.model.enums.EstadoLote;
 import com.federa.backend.model.enums.ExtensionLote;
 import com.federa.backend.model.enums.Mercado;
+import com.federa.backend.util.CodigoLote;
+import com.federa.backend.util.CodigoPadron;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
@@ -31,8 +33,8 @@ public record LoteResponse(
         @Schema(description = "Subdivisión, ya normalizada.", example = "A")
         ExtensionLote extension,
 
-        @Schema(description = "Derivado: número y extensión juntos, para mostrar.",
-                example = "74-A")
+        @Schema(description = "Derivado: número y letra automática juntos, para mostrar.",
+                example = "74 A")
         String codigo,
 
         @Schema(description = "Estado normalizado. DESCONOCIDO significa que la escritura de "
@@ -82,6 +84,9 @@ public record LoteResponse(
     public record Tenedor(
             @Schema(example = "812") Long productorId,
             @Schema(example = "CANDIDO COLQUECHAMBI MAMANI") String nombre,
+            @Schema(example = "2-13J-78") String codigoPadron,
+            @Schema(description = "A-H cuando comparte número de lote.", example = "A")
+            String letra,
             @Schema(example = "2026-03-01") LocalDate desde) {
     }
 
@@ -114,7 +119,8 @@ public record LoteResponse(
                 lote.getId(),
                 lote.getNumero(),
                 lote.getExtension(),
-                lote.getCodigo(),
+                CodigoLote.de(lote, tenencia == null
+                        ? null : tenencia.getProductor().getLetraCodigo()),
                 lote.getEstadoLote(),
                 lote.getEstadoOriginal(),
                 lote.getMercado(),
@@ -128,6 +134,8 @@ public record LoteResponse(
                 tenencia == null ? null : new Tenedor(
                         tenencia.getProductor().getId(),
                         tenencia.getProductor().getNombreCompleto(),
+                        CodigoPadron.de(tenencia.getProductor()),
+                        tenencia.getProductor().getLetraCodigo(),
                         tenencia.getDesde()),
                 sistema == null ? null : new SistemaEnLote(
                         sistema.getSistema().getId(),

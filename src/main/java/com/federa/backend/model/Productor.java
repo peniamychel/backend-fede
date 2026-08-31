@@ -93,6 +93,17 @@ public class Productor extends EntidadAuditable {
     @Column
     private Integer correlativo;
 
+    /**
+     * Letra que distingue a quienes comparten un mismo número de lote.
+     * <p>
+     * Es null mientras el lote tenga un solo productor. Cuando el mismo número
+     * está repartido entre varias filas vigentes, sus lotes se muestran como
+     * "22 A", "22 B"... según la prioridad y el orden de asignación. La letra
+     * no modifica el correlativo propio de cada productor.
+     */
+    @Column(name = "letra_codigo", length = 1)
+    private String letraCodigo;
+
     /** Columna "C.I". Texto: admite formatos con complemento ("8005906-1V"). */
     @Column(length = 20)
     private String ci;
@@ -126,6 +137,29 @@ public class Productor extends EntidadAuditable {
     @Column(nullable = false)
     @Builder.Default
     private boolean marcado = false;
+
+    /**
+     * Los registros creados por importación masiva se revisan contra SIE al
+     * abrir su ficha por primera vez. Las altas manuales ya consultan SIE en
+     * el formulario, por eso nacen con este indicador apagado.
+     */
+    @Column(name = "revision_sie_pendiente", nullable = false)
+    @Builder.Default
+    private boolean revisionSiePendiente = false;
+
+    /**
+     * Cantidad de trabajos de impresión de anverso confirmados para este
+     * productor. El reverso no modifica este valor porque es común a todo el
+     * sindicato y no identifica una tarjeta concreta.
+     */
+    @Column(name = "credencial_impresiones", nullable = false,
+            columnDefinition = "integer default 0")
+    @Builder.Default
+    private int credencialImpresiones = 0;
+
+    /** Última vez que se confirmó el envío de su anverso a la impresora. */
+    @Column(name = "credencial_ultima_impresion", columnDefinition = "datetime")
+    private LocalDateTime credencialUltimaImpresion;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "sindicato_id", nullable = false,

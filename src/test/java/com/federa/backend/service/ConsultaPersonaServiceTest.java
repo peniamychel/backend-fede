@@ -24,8 +24,8 @@ class ConsultaPersonaServiceTest {
         ConsultaPersonaResponse respuesta = servicio.consultar("8005906-1V");
 
         assertThat(respuesta.estado()).isEqualTo(ConsultaPersonaResponse.Estado.ENCONTRADA);
-        assertThat(respuesta.nombres()).isEqualTo("INOCENTES");
-        assertThat(respuesta.apellidos()).isEqualTo("YAURI PUCHO");
+        assertThat(respuesta.nombres()).isEqualTo("INOCÉNTES");
+        assertThat(respuesta.apellidos()).isEqualTo("YÁURI PUCHO");
         verify(sie).buscar("8005906", "1V");
     }
 

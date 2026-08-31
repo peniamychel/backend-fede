@@ -49,6 +49,13 @@ public class ProcesadorImagenes {
     /** Veces que se reintenta achicando las dimensiones si la calidad no alcanzó. */
     private static final int INTENTOS_REDUCIENDO = 4;
 
+    public static final int PESO_ORIGINAL_EDITABLE = 300 * 1024;
+    private static final int LADO_ORIGINAL_EDITABLE = 1600;
+
+    /** Una hoja fotografiada debe seguir siendo legible sin ocupar varios MB. */
+    public static final int PESO_DOCUMENTO = 300 * 1024;
+    private static final int LADO_DOCUMENTO = 2200;
+
     /** Resultado del procesamiento de una variante. */
     public record Variante(byte[] contenido, int ancho, int alto, String tipoMime) {
     }
@@ -143,6 +150,11 @@ public class ProcesadorImagenes {
         }
     }
 
+    /** Normaliza la orientación de una imagen subida y conserva su transparencia. */
+    public Variante prepararPng(byte[] contenido, int ladoMaximo, int pesoObjetivo) {
+        return generarPng(leerConOrientacion(contenido), ladoMaximo, pesoObjetivo);
+    }
+
     /**
      * Reduce la imagen hasta que entre en el lado y el peso pedidos.
      * <p>
@@ -179,6 +191,76 @@ public class ProcesadorImagenes {
         // Devolver la mejor aproximación es preferible a fallar: una foto un
         // poco más pesada de lo previsto sigue sirviendo, y el caso es raro.
         return describir(ultimo, MIME);
+    }
+
+    /**
+     * Conserva una copia suficientemente grande para volver a editar firmas,
+     * pies y sellos, garantizando que nunca supere 300 KB.
+     */
+    public Variante generarOriginalEditable(BufferedImage origen) {
+        return generarConLimiteEstricto(
+                origen, LADO_ORIGINAL_EDITABLE, PESO_ORIGINAL_EDITABLE);
+    }
+
+    private Variante generarConLimiteEstricto(BufferedImage origen,
+                                               int ladoMaximo,
+                                               int pesoMaximo) {
+        BufferedImage plana = aplanar(origen);
+        int lado = Math.min(
+                ladoMaximo,
+                Math.max(plana.getWidth(), plana.getHeight()));
+        byte[] ultimo = null;
+
+        while (true) {
+            for (float calidad : CALIDADES) {
+                byte[] bytes = comprimir(plana, lado, calidad);
+                ultimo = bytes;
+                if (bytes.length <= pesoMaximo) {
+                    return describir(bytes, MIME);
+                }
+            }
+            if (lado <= 64) {
+                break;
+            }
+            lado = Math.max(64, (int) (lado * 0.75));
+        }
+        return describir(ultimo, MIME);
+    }
+
+    /** Normaliza la orientación y prepara la copia que podrá editarse después. */
+    public Variante prepararOriginalEditable(byte[] contenido) {
+        return generarOriginalEditable(leerConOrientacion(contenido));
+    }
+
+    /**
+     * Prepara una fotografía de documento para lectura en pantalla y PDF.
+     * Conserva hasta 2200 píxeles en el lado mayor, corrige la orientación EXIF
+     * y ajusta calidad/dimensiones hasta quedar por debajo de 300 KB.
+     */
+    public Variante prepararDocumento(byte[] contenido) {
+        return generarConLimiteEstricto(leerConOrientacion(contenido),
+                LADO_DOCUMENTO, PESO_DOCUMENTO);
+    }
+
+    /**
+     * Aplica físicamente la orientación EXIF antes de guardar la copia
+     * editable. Las cámaras suelen guardar los píxeles de lado y dejar en los
+     * metadatos la instrucción para girarlos; si se recomprime con ImageIO esa
+     * instrucción desaparece y la siguiente edición abre la firma girada.
+     */
+    private BufferedImage leerConOrientacion(byte[] contenido) {
+        if (contenido == null || contenido.length == 0) {
+            throw new ArchivoInvalidoException("El archivo vino vacío.");
+        }
+        try {
+            return Thumbnails.of(new ByteArrayInputStream(contenido))
+                    .scale(1)
+                    .useExifOrientation(true)
+                    .asBufferedImage();
+        } catch (IOException e) {
+            throw new ArchivoInvalidoException(
+                    "No se pudo orientar la imagen original: " + e.getMessage(), e);
+        }
     }
 
     private byte[] comprimir(BufferedImage imagen, int ladoMayor, float calidad) {

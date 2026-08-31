@@ -1,6 +1,10 @@
 package com.federa.backend.repository;
 
 import com.federa.backend.model.Central;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -20,4 +24,9 @@ public interface CentralRepository extends JpaRepository<Central, Long> {
     Optional<Central> findByAbreviatura(String abreviatura);
 
     long countByFederacionId(Long federacionId);
+
+    /** Serializa la entrega de correlativos dentro de una misma central. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from Central c where c.id = :id")
+    Optional<Central> findByIdParaNumerar(@Param("id") Long id);
 }

@@ -65,6 +65,16 @@ public class Sindicato extends EntidadAuditable {
     @Column(name = "sello_clave", length = 200)
     private String selloClave;
 
+    @Column(name = "sello_original_clave", length = 200)
+    private String selloOriginalClave;
+
+    /** PDF consolidado de las fotografías de la lista física. */
+    @Column(name = "lista_fisica_pdf_clave", length = 220)
+    private String listaFisicaPdfClave;
+
+    @Column(name = "lista_fisica_actualizada_en")
+    private LocalDateTime listaFisicaActualizadaEn;
+
     /**
      * Latitud de la sede, en grados decimales. Null mientras no se haya
      * marcado en el mapa.
@@ -94,6 +104,13 @@ public class Sindicato extends EntidadAuditable {
     @Builder.Default
     @OneToMany(mappedBy = "sindicato", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Productor> productores = new ArrayList<>();
+
+    @JsonIgnore
+    @Builder.Default
+    @OneToMany(mappedBy = "sindicato", cascade = CascadeType.ALL,
+            orphanRemoval = true)
+    @OrderBy("orden ASC")
+    private List<PaginaListaFisicaSindicato> paginasListaFisica = new ArrayList<>();
 
     public void agregarProductor(Productor productor) {
         productores.add(productor);

@@ -39,7 +39,7 @@ public class FederacionService {
 
     @Transactional
     public FederacionResponse crear(FederacionRequest request) {
-        String nombre = Textos.normalizar(request.nombre());
+        String nombre = Textos.normalizarParaGuardar(request.nombre());
         String numero = Textos.limpiar(request.numero());
         if (federacionRepository.existsByNombreIgnoreCase(nombre)) {
             throw new ReglaNegocioException("Ya existe una federación llamada " + nombre);
@@ -55,7 +55,7 @@ public class FederacionService {
     @Transactional
     public FederacionResponse actualizar(Long id, FederacionRequest request) {
         Federacion federacion = buscar(id);
-        String nombre = Textos.normalizar(request.nombre());
+        String nombre = Textos.normalizarParaGuardar(request.nombre());
         String numero = Textos.limpiar(request.numero());
         federacionRepository.findByNombreIgnoreCase(nombre)
                 .filter(otra -> !otra.getId().equals(id))

@@ -5,6 +5,8 @@ import com.federa.backend.almacen.AlmacenObjetos;
 import com.federa.backend.dto.CredencialDirigente;
 import com.federa.backend.dto.CredencialPrevia;
 import com.federa.backend.dto.CredencialProductor;
+import com.federa.backend.dto.ProductorResponse;
+import com.federa.backend.dto.VetoResponse;
 import com.federa.backend.exception.RecursoNoEncontradoException;
 import com.federa.backend.exception.ReglaNegocioException;
 import com.federa.backend.model.Cargo;
@@ -23,6 +25,7 @@ import com.federa.backend.repository.ImagenProductorRepository;
 import com.federa.backend.repository.LoteRepository;
 import com.federa.backend.repository.ProductorRepository;
 import com.federa.backend.repository.SindicatoRepository;
+import com.federa.backend.util.CodigoLote;
 import com.federa.backend.util.CodigoPadron;
 import com.federa.backend.util.Textos;
 import org.slf4j.Logger;
@@ -32,14 +35,18 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.text.Collator;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -124,15 +131,18 @@ public class CredencialService {
         // estén completos. Es una decisión, no un dato que falte.
         exigirSinVeto(productor);
 
+        List<String> codigosLote = loteRepository.findVigentesDeProductor(productorId).stream()
+                .map(lote -> CodigoLote.de(lote, productor.getLetraCodigo()))
+                .filter(codigo -> codigo != null)
+                .toList();
+
         // Se revisa antes de dibujar nada. Una credencial sale plastificada y se
         // reparte: emitirla incompleta es papel que hay que volver a imprimir.
-        exigirCompleta(faltantesDe(productor, sindicato), productor.getNombreCompleto());
+        exigirCompleta(faltantesDe(productor, sindicato, !codigosLote.isEmpty()),
+                productor.getNombreCompleto());
 
         Directorio directorio = directorioDe(sindicato);
-        String lotes = unir(loteRepository.findVigentesDeProductor(productorId).stream()
-                .map(Lote::getCodigo)
-                .filter(codigo -> codigo != null)
-                .toList());
+        String lotes = unir(codigosLote);
 
         CredencialProductor credencial = armar(productor, sindicato, lotes,
                 fotoDe(productorId), directorio);
@@ -160,18 +170,30 @@ public class CredencialService {
 
         Jerarquia jerarquia = jerarquiaDe(sindicato);
 
+        List<String> codigosLote = loteRepository.findVigentesDeProductor(productorId).stream()
+                .map(lote -> CodigoLote.de(lote, productor.getLetraCodigo()))
+                .filter(codigo -> codigo != null)
+                .toList();
+
         List<CredencialPrevia.Faltante> faltantes = new ArrayList<>(
                 requisitos.deJerarquia(sindicato, jerarquia.ejecutivoFederacion(),
                         jerarquia.secretarioCentral(), jerarquia.secretarioSindicato()));
-        faltantes.addAll(requisitos.delProductor(productor, fotoUrlDe(productorId) != null));
+        faltantes.addAll(requisitos.delProductor(
+                productor, fotoUrlDe(productorId) != null, !codigosLote.isEmpty()));
 
-        String lotes = unir(loteRepository.findVigentesDeProductor(productorId).stream()
-                .map(Lote::getCodigo)
-                .filter(codigo -> codigo != null)
-                .toList());
+        String lotes = unir(codigosLote);
 
         CredencialPrevia.Bloqueo bloqueo = bloqueoDe(productor);
 
+        return armarPrevia(productor, sindicato, jerarquia, lotes,
+                fotoUrlDe(productorId), faltantes, bloqueo);
+    }
+
+    private CredencialPrevia armarPrevia(Productor productor, Sindicato sindicato,
+                                         Jerarquia jerarquia, String lotes,
+                                         String fotoUrl,
+                                         List<CredencialPrevia.Faltante> faltantes,
+                                         CredencialPrevia.Bloqueo bloqueo) {
         return new CredencialPrevia(
                 productor.getId(),
                 productor.getNombreCompleto(),
@@ -184,7 +206,7 @@ public class CredencialService {
                 lotes,
                 CodigoPadron.de(productor),
                 productor.getCodigo(),
-                fotoUrlDe(productorId),
+                fotoUrl,
                 urlDe(sindicato.getCentral().getFederacion().getSelloClave()),
                 urlDe(sindicato.getCentral().getSelloClave()),
                 urlDe(sindicato.getSelloClave()),
@@ -221,11 +243,13 @@ public class CredencialService {
                 jerarquia.secretarioSindicato());
 
         Map<Long, String> fotos = fotoUrlesDe(productores.stream().map(Productor::getId).toList());
+        Map<Long, List<String>> lotes = lotesPorProductor(sindicatoId);
 
         List<ProductorIncompleto> incompletos = new ArrayList<>();
         for (Productor productor : productores) {
             List<CredencialPrevia.Faltante> suyos = requisitos.delProductor(
-                    productor, fotos.get(productor.getId()) != null);
+                    productor, fotos.get(productor.getId()) != null,
+                    tieneNumeroLote(lotes, productor.getId()));
             if (!suyos.isEmpty()) {
                 incompletos.add(new ProductorIncompleto(
                         productor.getId(), productor.getNombreCompleto(), suyos));
@@ -249,12 +273,278 @@ public class CredencialService {
                                       List<CredencialPrevia.Faltante> faltantes) {
     }
 
-    private List<CredencialPrevia.Faltante> faltantesDe(Productor productor, Sindicato sindicato) {
+    /** Estado de la cola de impresión de un sindicato. */
+    public record PanelImpresionSindicato(
+            Long sindicatoId,
+            String sindicato,
+            int total,
+            int impresos,
+            int faltantesConFoto,
+            int sinFoto,
+            int listosParaImprimir,
+            List<CredencialPrevia.Faltante> faltantesDelSindicato,
+            List<CandidatoImpresion> candidatos) {
+    }
+
+    /** Un anverso todavía no impreso que tiene fotografía. */
+    public record CandidatoImpresion(CredencialPrevia credencial,
+                                     int impresiones,
+                                     LocalDateTime ultimaImpresion,
+                                     boolean seleccionable) {
+    }
+
+    /** Listas nominales usadas por el informe de entrega y datos faltantes. */
+    public record EstadoNominalSindicato(
+            Long sindicatoId,
+            String sindicato,
+            List<FilaInformeImpresion> impresos,
+            List<FilaInformeImpresion> faltantesDatos) {
+    }
+
+    /** Una persona identificada en el informe nominal de impresión. */
+    public record FilaInformeImpresion(
+            Long productorId,
+            String nombres,
+            String apellidos,
+            String ci,
+            String lotes,
+            String codigoPadron,
+            int impresiones,
+            LocalDateTime ultimaImpresion,
+            List<String> datosFaltantes) {
+    }
+
+    /** Identificadores seleccionados en la vista previa de impresión. */
+    public record SeleccionImpresion(List<Long> productorIds) {
+    }
+
+    /**
+     * Resumen y candidatos del nuevo flujo masivo. Las cuatro cifras son
+     * categorías excluyentes: una persona ya impresa no vuelve a contarse
+     * entre quienes hoy no tienen foto.
+     */
+    public PanelImpresionSindicato panelImpresionSindicato(Long sindicatoId) {
+        Sindicato sindicato = sindicatoRepository.findById(sindicatoId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("sindicato", sindicatoId));
+        List<Productor> productores = productoresOrdenados(sindicatoId);
+        Jerarquia jerarquia = jerarquiaDe(sindicato);
+        List<CredencialPrevia.Faltante> faltantesJerarquia = requisitos.deJerarquia(
+                sindicato, jerarquia.ejecutivoFederacion(), jerarquia.secretarioCentral(),
+                jerarquia.secretarioSindicato());
+        Map<Long, String> fotos = fotoUrlesDe(productores.stream().map(Productor::getId).toList());
+        Map<Long, List<String>> lotes = lotesPorProductor(sindicatoId);
+        Map<Long, VetoResponse> vetos = new HashMap<>();
+        for (VetoResponse veto : vetoService.buscar(null, sindicatoId, true)) {
+            vetos.put(veto.productorId(), veto);
+        }
+
+        int impresos = 0;
+        int faltantesConFoto = 0;
+        int sinFoto = 0;
+        int listos = 0;
+        List<CandidatoImpresion> candidatos = new ArrayList<>();
+        for (Productor productor : productores) {
+            if (productor.getCredencialImpresiones() > 0) {
+                impresos++;
+                continue;
+            }
+            String fotoUrl = fotos.get(productor.getId());
+            if (fotoUrl == null) {
+                sinFoto++;
+                continue;
+            }
+            faltantesConFoto++;
+            List<CredencialPrevia.Faltante> faltantes = new ArrayList<>(faltantesJerarquia);
+            faltantes.addAll(requisitos.delProductor(
+                    productor, true, tieneNumeroLote(lotes, productor.getId())));
+            CredencialPrevia.Bloqueo bloqueo = bloqueoDe(vetos.get(productor.getId()));
+            boolean seleccionable = faltantes.isEmpty() && bloqueo == null;
+            if (seleccionable) listos++;
+            CredencialPrevia previa = armarPrevia(productor, sindicato, jerarquia,
+                    unir(lotes.get(productor.getId())), fotoUrl, faltantes, bloqueo);
+            candidatos.add(new CandidatoImpresion(previa,
+                    productor.getCredencialImpresiones(),
+                    productor.getCredencialUltimaImpresion(), seleccionable));
+        }
+        return new PanelImpresionSindicato(sindicato.getId(), sindicato.getNombre(),
+                productores.size(), impresos, faltantesConFoto, sinFoto, listos,
+                List.copyOf(faltantesJerarquia), List.copyOf(candidatos));
+    }
+
+    /**
+     * Separa a quienes ya tienen al menos una impresión confirmada de quienes
+     * no pudieron imprimirse porque todavía les falta algún requisito.
+     * Quien está completo pero simplemente sigue en cola no aparece como dato
+     * faltante: esa distinción evita convertir un pendiente normal en error.
+     */
+    public EstadoNominalSindicato estadoNominalSindicato(Long sindicatoId) {
+        Sindicato sindicato = sindicatoRepository.findById(sindicatoId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("sindicato", sindicatoId));
+        List<Productor> productores = productoresOrdenados(sindicatoId);
+        Map<Long, String> fotos = fotoUrlesDe(productores.stream().map(Productor::getId).toList());
+        Map<Long, List<String>> lotes = lotesPorProductor(sindicatoId);
+        List<FilaInformeImpresion> impresos = new ArrayList<>();
+        List<FilaInformeImpresion> faltantesDatos = new ArrayList<>();
+
+        for (Productor productor : productores) {
+            List<String> faltantes = new ArrayList<>();
+            if (productor.getCredencialImpresiones() == 0) {
+                faltantes.addAll(requisitos.delProductor(
+                                productor, fotos.containsKey(productor.getId()),
+                                tieneNumeroLote(lotes, productor.getId())).stream()
+                        .map(CredencialPrevia.Faltante::campo).toList());
+            }
+            FilaInformeImpresion fila = new FilaInformeImpresion(
+                    productor.getId(), nombresDe(productor), apellidosDe(productor),
+                    texto(productor.getCi()), unir(lotes.get(productor.getId())),
+                    texto(CodigoPadron.de(productor)), productor.getCredencialImpresiones(),
+                    productor.getCredencialUltimaImpresion(), List.copyOf(faltantes));
+            if (productor.getCredencialImpresiones() > 0) {
+                impresos.add(fila);
+            } else if (!faltantes.isEmpty()) {
+                faltantesDatos.add(fila);
+            }
+        }
+        return new EstadoNominalSindicato(sindicato.getId(), sindicato.getNombre(),
+                List.copyOf(impresos), List.copyOf(faltantesDatos));
+    }
+
+    /** Genera únicamente los anversos seleccionados, uno por página CR80. */
+    public Descarga generarAnversosSindicato(Long sindicatoId, SeleccionImpresion seleccion) {
+        Sindicato sindicato = sindicatoRepository.findById(sindicatoId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("sindicato", sindicatoId));
+        List<Productor> productores = seleccionarProductores(sindicatoId, seleccion);
+        Jerarquia jerarquia = jerarquiaDe(sindicato);
+        exigirCompleta(requisitos.deJerarquia(sindicato, jerarquia.ejecutivoFederacion(),
+                jerarquia.secretarioCentral(), jerarquia.secretarioSindicato()),
+                sindicato.getNombre());
+
+        List<Long> ids = productores.stream().map(Productor::getId).toList();
+        Map<Long, byte[]> fotos = fotosDe(ids);
+        Map<Long, List<String>> lotes = lotesPorProductor(sindicatoId);
+        Directorio directorio = directorioDe(sindicato);
+        List<CredencialProductor> credenciales = new ArrayList<>();
+        for (Productor productor : productores) {
+            if (productor.getCredencialImpresiones() > 0) {
+                throw new ReglaNegocioException(productor.getNombreCompleto()
+                        + " ya figura como impreso; recargá la cola antes de continuar");
+            }
+            exigirSinVeto(productor);
+            byte[] foto = fotos.get(productor.getId());
+            exigirCompleta(requisitos.delProductor(
+                            productor, foto != null, tieneNumeroLote(lotes, productor.getId())),
+                    productor.getNombreCompleto());
+            credenciales.add(armar(productor, sindicato,
+                    unir(lotes.get(productor.getId())), foto, directorio));
+        }
+        String nombre = "credenciales-faltantes-"
+                + Textos.paraNombreDeArchivo(sindicato.getNombre(), 35)
+                + "-anversos.pdf";
+        return new Descarga(nombre, generador.generarTarjetas(credenciales,
+                disenoCredencialService.actual(), CaraCredencial.ANVERSO));
+    }
+
+    /**
+     * Confirma un trabajo aceptado por Windows. Cada nueva confirmación suma
+     * una impresión; nunca se llama al imprimir reversos.
+     */
+    @Transactional
+    public PanelImpresionSindicato confirmarAnversosImpresos(
+            Long sindicatoId, SeleccionImpresion seleccion) {
+        List<Productor> productores = seleccionarProductores(sindicatoId, seleccion);
+        LocalDateTime ahora = LocalDateTime.now();
+        for (Productor productor : productores) {
+            productor.setCredencialImpresiones(productor.getCredencialImpresiones() + 1);
+            productor.setCredencialUltimaImpresion(ahora);
+        }
+        productorRepository.flush();
+        return panelImpresionSindicato(sindicatoId);
+    }
+
+    /** Registra el anverso enviado desde la impresión manual de un productor. */
+    @Transactional
+    public ProductorResponse confirmarAnversoImpreso(Long productorId) {
+        Productor productor = productorRepository.findById(productorId)
+                .orElseThrow(() -> new RecursoNoEncontradoException(
+                        "productor", productorId));
+        productor.setCredencialImpresiones(productor.getCredencialImpresiones() + 1);
+        productor.setCredencialUltimaImpresion(LocalDateTime.now());
+        productorRepository.flush();
+        return ProductorResponse.desde(productor);
+    }
+
+    /** Genera tantos reversos idénticos como tarjetas se hayan volteado. */
+    public Descarga generarReversosSindicato(Long sindicatoId, int cantidad) {
+        if (cantidad < 1 || cantidad > MAXIMO_POR_PLIEGO) {
+            throw new ReglaNegocioException("La cantidad de reversos debe estar entre 1 y "
+                    + MAXIMO_POR_PLIEGO);
+        }
+        Sindicato sindicato = sindicatoRepository.findById(sindicatoId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("sindicato", sindicatoId));
+        List<Productor> productores = productoresOrdenados(sindicatoId);
+        if (productores.isEmpty()) {
+            throw new ReglaNegocioException("El sindicato no tiene productores");
+        }
+        Jerarquia jerarquia = jerarquiaDe(sindicato);
+        exigirCompleta(requisitos.deJerarquia(sindicato, jerarquia.ejecutivoFederacion(),
+                jerarquia.secretarioCentral(), jerarquia.secretarioSindicato()),
+                sindicato.getNombre());
+        Productor muestra = productores.get(0);
+        CredencialProductor reverso = armar(muestra, sindicato, "", null,
+                directorioDe(sindicato));
+        String nombre = "credenciales-"
+                + Textos.paraNombreDeArchivo(sindicato.getNombre(), 35)
+                + "-reversos-" + cantidad + ".pdf";
+        return new Descarga(nombre, generador.generarTarjetas(
+                Collections.nCopies(cantidad, reverso), disenoCredencialService.actual(),
+                CaraCredencial.REVERSO));
+    }
+
+    private List<Productor> seleccionarProductores(Long sindicatoId,
+                                                    SeleccionImpresion seleccion) {
+        if (seleccion == null || seleccion.productorIds() == null) {
+            throw new ReglaNegocioException("Seleccioná al menos un productor");
+        }
+        Set<Long> ids = new LinkedHashSet<>(seleccion.productorIds());
+        ids.remove(null);
+        if (ids.isEmpty() || ids.size() > MAXIMO_POR_PLIEGO) {
+            throw new ReglaNegocioException("Seleccioná entre 1 y " + MAXIMO_POR_PLIEGO
+                    + " productores");
+        }
+        Map<Long, Productor> encontrados = productorRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Productor::getId, p -> p));
+        if (encontrados.size() != ids.size()) {
+            throw new ReglaNegocioException("La selección contiene un productor inexistente");
+        }
+        List<Productor> resultado = new ArrayList<>();
+        for (Long id : ids) {
+            Productor productor = encontrados.get(id);
+            if (!sindicatoId.equals(productor.getSindicato().getId())) {
+                throw new ReglaNegocioException(productor.getNombreCompleto()
+                        + " no pertenece a este sindicato");
+            }
+            resultado.add(productor);
+        }
+        return resultado;
+    }
+
+    private List<Productor> productoresOrdenados(Long sindicatoId) {
+        List<Productor> productores = new ArrayList<>(
+                productorRepository.findBySindicatoId(sindicatoId));
+        productores.sort(Comparator
+                .comparing(CredencialService::apellidosDe, ALFABETO::compare)
+                .thenComparing(CredencialService::nombresDe, ALFABETO::compare));
+        return productores;
+    }
+
+    private List<CredencialPrevia.Faltante> faltantesDe(Productor productor, Sindicato sindicato,
+                                                        boolean tieneNumeroLote) {
         Jerarquia jerarquia = jerarquiaDe(sindicato);
         List<CredencialPrevia.Faltante> faltantes = new ArrayList<>(requisitos.deJerarquia(
                 sindicato, jerarquia.ejecutivoFederacion(), jerarquia.secretarioCentral(),
                 jerarquia.secretarioSindicato()));
-        faltantes.addAll(requisitos.delProductor(productor, fotoDe(productor.getId()) != null));
+        faltantes.addAll(requisitos.delProductor(
+                productor, fotoDe(productor.getId()) != null, tieneNumeroLote));
         return faltantes;
     }
 
@@ -338,6 +628,17 @@ public class CredencialService {
                 veto.getDesde(),
                 "Se destraba cuando otra reunión decida sacarlo de la lista de vetados, y se "
                 + "suba el acta de esa reunión.");
+    }
+
+    private CredencialPrevia.Bloqueo bloqueoDe(VetoResponse veto) {
+        if (veto == null) return null;
+        return new CredencialPrevia.Bloqueo(
+                "Observado por la asamblea",
+                veto.motivo(),
+                veto.reunion() == null ? "" : veto.reunion().titulo(),
+                veto.desde(),
+                "Se destraba cuando otra reunión decida sacarlo de la lista de vetados, y se "
+                        + "suba el acta de esa reunión.");
     }
 
     private CredencialPrevia.Firmante firmantePrevio(Cargo cargo) {
@@ -626,15 +927,25 @@ public class CredencialService {
         Map<Long, List<String>> porProductor = new HashMap<>();
         for (Object[] fila : loteRepository.findIdentificacionesPorSindicato(sindicatoId)) {
             String numero = (String) fila[1];
-            if (numero == null) {
+            if (numero == null || numero.isBlank()) {
                 continue;
             }
             ExtensionLote extension = (ExtensionLote) fila[2];
+            String letraCompartida = (String) fila[3];
+            String codigo = CodigoLote.de(numero, extension, letraCompartida);
+            if (codigo == null) {
+                continue;
+            }
             porProductor
                     .computeIfAbsent((Long) fila[0], k -> new ArrayList<>())
-                    .add(extension != null ? numero + "-" + extension.name() : numero);
+                    .add(codigo);
         }
         return porProductor;
+    }
+
+    private boolean tieneNumeroLote(Map<Long, List<String>> lotes, Long productorId) {
+        List<String> codigos = lotes.get(productorId);
+        return codigos != null && !codigos.isEmpty();
     }
 
     // ------------------------------------------------------------ auxiliares

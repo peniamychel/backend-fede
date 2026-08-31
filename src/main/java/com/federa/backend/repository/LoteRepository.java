@@ -37,7 +37,7 @@ public interface LoteRepository extends JpaRepository<Lote, Long> {
             select l.numero from Lote l
             where l.sindicato.id = :sindicatoId
               and l.numero is not null
-            group by l.numero, l.extension
+            group by l.numero
             having count(l) > 1
             """)
     List<String> findNumerosDuplicadosEnSindicato(@Param("sindicatoId") Long sindicatoId);
@@ -46,11 +46,11 @@ public interface LoteRepository extends JpaRepository<Lote, Long> {
      * Para el informe: qué lotes tiene hoy cada productor del sindicato, en una
      * sola consulta.
      * <p>
-     * Devuelve (productorId, numero, extension). Va por la tenencia vigente
+     * Devuelve (productorId, numero, extension, letraCompartida). Va por la tenencia vigente
      * porque es la que dice de quién es el lote hoy, que es lo que se imprime.
      */
     @Query("""
-            select t.productor.id, l.numero, l.extension
+            select t.productor.id, l.numero, l.extension, t.productor.letraCodigo
               from TenenciaLote t join t.lote l
              where l.sindicato.id = :sindicatoId and t.vigente = true
              order by l.numero, l.extension

@@ -130,6 +130,40 @@ public class SindicatoController {
         return credencialService.previaDeSindicato(id);
     }
 
+    @GetMapping("/{id}/credenciales/impresion")
+    @Operation(summary = "Panel de impresión masiva de credenciales del sindicato")
+    public CredencialService.PanelImpresionSindicato panelImpresion(@PathVariable Long id) {
+        return credencialService.panelImpresionSindicato(id);
+    }
+
+    @PostMapping(value = "/{id}/credenciales/impresion/anversos.pdf",
+            produces = MediaType.APPLICATION_PDF_VALUE)
+    @Operation(summary = "Genera los anversos seleccionados como páginas CR80")
+    public ResponseEntity<byte[]> anversosSeleccionados(
+            @PathVariable Long id,
+            @RequestBody CredencialService.SeleccionImpresion seleccion) {
+        return ProductorController.comoAdjunto(
+                credencialService.generarAnversosSindicato(id, seleccion));
+    }
+
+    @PostMapping("/{id}/credenciales/impresion/confirmar")
+    @Operation(summary = "Registra los anversos aceptados por la impresora de Windows")
+    public CredencialService.PanelImpresionSindicato confirmarAnversos(
+            @PathVariable Long id,
+            @RequestBody CredencialService.SeleccionImpresion seleccion) {
+        return credencialService.confirmarAnversosImpresos(id, seleccion);
+    }
+
+    @GetMapping(value = "/{id}/credenciales/impresion/reversos.pdf",
+            produces = MediaType.APPLICATION_PDF_VALUE)
+    @Operation(summary = "Genera una cantidad de reversos idénticos en páginas CR80")
+    public ResponseEntity<byte[]> reversos(
+            @PathVariable Long id,
+            @RequestParam int cantidad) {
+        return ProductorController.comoAdjunto(
+                credencialService.generarReversosSindicato(id, cantidad));
+    }
+
     @PutMapping("/{id}/ubicacion")
     @Operation(summary = "Marca o mueve la sede del sindicato",
             description = "Recibe las coordenadas en grados decimales, tal como las entrega el "

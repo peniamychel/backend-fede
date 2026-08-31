@@ -73,6 +73,23 @@ class RequisitosCredencialTest {
                 .contains("Secretario General del sindicato");
     }
 
+    @Test
+    void elNumeroDeLoteEsObligatorioParaImprimirElCarnetDeProductor() {
+        Productor productor = mock(Productor.class);
+        when(productor.getNombres()).thenReturn("MARÍA");
+        when(productor.getApellidos()).thenReturn("PÉREZ");
+        when(productor.getCi()).thenReturn("1234567");
+        when(productor.getCorrelativo()).thenReturn(10);
+        RequisitosCredencial requisitos = new RequisitosCredencial(
+                new ReglasDirectorio(false, false));
+
+        List<Faltante> sinLote = requisitos.delProductor(productor, true, false);
+        List<Faltante> conLote = requisitos.delProductor(productor, true, true);
+
+        assertThat(sinLote).extracting(Faltante::campo).contains("Número de lote");
+        assertThat(conLote).extracting(Faltante::campo).doesNotContain("Número de lote");
+    }
+
     private Cargo cargoSinFirma(String nombre) {
         Cargo cargo = mock(Cargo.class);
         Productor productor = mock(Productor.class);

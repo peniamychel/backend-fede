@@ -140,7 +140,8 @@ public class LoteController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Elimina un lote")
+    @Operation(summary = "Elimina un lote sin productor asignado",
+            description = "Devuelve 409 si la parcela todavía tiene un tenedor vigente.")
     public void eliminar(@PathVariable Long id) {
         loteService.eliminar(id);
     }

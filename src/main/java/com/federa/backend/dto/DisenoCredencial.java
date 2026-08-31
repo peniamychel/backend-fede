@@ -9,9 +9,27 @@ import java.util.List;
  */
 public record DisenoCredencial(float ancho, float alto, List<Elemento> elementos) {
 
+    public static final String CAMPO_PLANTILLA = "PLANTILLA";
+    public static final String CAMPO_IMAGEN_PERSONALIZADA = "IMAGEN_PERSONALIZADA";
+
     public enum Cara { CARA, REVERSO }
-    public enum Tipo { TEXTO, IMAGEN, PIE_FIRMA }
+    public enum Tipo { TEXTO, IMAGEN, PIE_FIRMA, PLANTILLA }
     public enum Alineacion { IZQUIERDA, CENTRO, DERECHA }
+    public enum Fuente {
+        ROBOTO,
+        MONTSERRAT,
+        MERRIWEATHER,
+        LATO,
+        UBUNTU,
+        PT_SANS,
+        BARLOW,
+        ALEGREYA_SANS,
+        TITILLIUM_WEB,
+        ANTON,
+        CRIMSON_TEXT,
+        SPECTRAL,
+        CARDO
+    }
 
     public record Elemento(
             String id,
@@ -27,13 +45,16 @@ public record DisenoCredencial(float ancho, float alto, List<Elemento> elementos
             boolean negrita,
             Alineacion alineacion,
             String color,
-            String texto) {
+            String texto,
+            Fuente fuente,
+            String recurso) {
     }
 
     public record CampoDisponible(String campo, String etiqueta, Tipo tipo) {
     }
 
-    public record Editor(DisenoCredencial diseno, List<CampoDisponible> camposDisponibles) {
+    public record Editor(DisenoCredencial diseno, List<CampoDisponible> camposDisponibles,
+                         String plantillaCaraUrl, String plantillaReversoUrl) {
     }
 
     public static DisenoCredencial porDefecto() {
@@ -44,6 +65,7 @@ public record DisenoCredencial(float ancho, float alto, List<Elemento> elementos
         float xSindicato = 3 * margen + 2 * bloque;
 
         return new DisenoCredencial(242.65f, 153.01f, List.of(
+                plantilla("plantilla-cara", Cara.CARA),
                 texto("numero-padron", Cara.CARA, "CODIGO_PADRON", "N° de padrón",
                         31f, 89.5f, 45f, 10f, 10f, true, "#5A0F0A"),
                 texto("nombre-completo", Cara.CARA, "NOMBRE_COMPLETO", "Nombre completo",
@@ -59,6 +81,7 @@ public record DisenoCredencial(float ancho, float alto, List<Elemento> elementos
                 imagen("foto", Cara.CARA, "FOTO", "Fotografía",
                         172f, 18.1f, 57.6f, 57f),
 
+                plantilla("plantilla-reverso", Cara.REVERSO),
                 imagen("sello-federacion", Cara.REVERSO, "SELLO_FEDERACION", "Sello federación",
                         xFederacion + 7f, 35f, bloque - 14f, 27f),
                 imagen("firma-federacion", Cara.REVERSO, "FIRMA_FEDERACION", "Firma ejecutivo",
@@ -111,19 +134,26 @@ public record DisenoCredencial(float ancho, float alto, List<Elemento> elementos
                                   float x, float y, float ancho, float alto,
                                   float fuente, boolean negrita, String color) {
         return new Elemento(id, cara, Tipo.TEXTO, campo, etiqueta, x, y, ancho, alto,
-                fuente, negrita, Alineacion.IZQUIERDA, color, "");
+                fuente, negrita, Alineacion.IZQUIERDA, color, "", Fuente.ROBOTO, null);
     }
 
     private static Elemento imagen(String id, Cara cara, String campo, String etiqueta,
                                    float x, float y, float ancho, float alto) {
         return new Elemento(id, cara, Tipo.IMAGEN, campo, etiqueta, x, y, ancho, alto,
-                5.5f, false, Alineacion.CENTRO, "#000000", "");
+                5.5f, false, Alineacion.CENTRO, "#000000", "", Fuente.ROBOTO, null);
     }
 
     private static Elemento pie(String id, String campo, String etiqueta,
                                 float x, float ancho) {
         return new Elemento(id, Cara.REVERSO, Tipo.PIE_FIRMA, campo, etiqueta,
-                x, 0f, ancho, 21f, 4.2f, true, Alineacion.CENTRO, "#000000", "");
+                x, 0f, ancho, 21f, 4.2f, true, Alineacion.CENTRO, "#000000", "",
+                Fuente.ROBOTO, null);
+    }
+
+    private static Elemento plantilla(String id, Cara cara) {
+        return new Elemento(id, cara, Tipo.PLANTILLA, CAMPO_PLANTILLA, "Plantilla",
+                0f, 0f, 242.65f, 153.01f, 5.5f, false,
+                Alineacion.CENTRO, "#000000", "", Fuente.ROBOTO, null);
     }
 
     private static CampoDisponible campo(String nombre, String etiqueta, Tipo tipo) {

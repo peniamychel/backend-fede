@@ -60,21 +60,37 @@ public class SelloDirectorioService {
 
     @Transactional
     public DirectorioResponse guardar(Ambito ambito, Long id, byte[] contenido) {
+        return guardar(ambito, id, contenido, null);
+    }
+
+    @Transactional
+    public DirectorioResponse guardar(Ambito ambito, Long id, byte[] contenido,
+                                      byte[] originalSubido) {
         DatosSello actual = datosDe(ambito, id);
         BufferedImage origen = procesador.leer(contenido);
         ProcesadorImagenes.Variante variante = procesador.generarPng(
                 origen, LADO_MAXIMO, PESO_MAXIMO);
+        ProcesadorImagenes.Variante original = procesador.prepararOriginalEditable(
+                originalSubido == null ? contenido : originalSubido);
 
         String aleatorio = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         String claveNueva = "sellos/" + ambito.name().toLowerCase() + "-" + id + "-"
                 + aleatorio + "-" + Textos.paraNombreDeArchivo(actual.nombre(), 35) + ".png";
+        String originalNueva = "originales-directorio/sellos/"
+                + ambito.name().toLowerCase() + "-" + id + "-" + aleatorio + "-"
+                + Textos.paraNombreDeArchivo(actual.nombre(), 35) + ".jpg";
 
         almacen.guardar(claveNueva, variante.contenido());
         alDeshacer(() -> almacen.borrar(claveNueva));
+        almacen.guardar(originalNueva, original.contenido());
+        alDeshacer(() -> almacen.borrar(originalNueva));
 
-        asignarClave(ambito, id, claveNueva);
+        asignarClaves(ambito, id, claveNueva, originalNueva);
         if (actual.clave() != null) {
             alConfirmar(() -> almacen.borrar(actual.clave()));
+        }
+        if (actual.originalClave() != null) {
+            alConfirmar(() -> almacen.borrar(actual.originalClave()));
         }
         return directorioService.obtener(ambito, id);
     }
@@ -86,45 +102,76 @@ public class SelloDirectorioService {
             throw new RecursoNoEncontradoException(
                     actual.nombre() + " no tiene un sello cargado.");
         }
-        asignarClave(ambito, id, null);
+        asignarClaves(ambito, id, null, null);
         alConfirmar(() -> almacen.borrar(actual.clave()));
+        if (actual.originalClave() != null) {
+            alConfirmar(() -> almacen.borrar(actual.originalClave()));
+        }
         return directorioService.obtener(ambito, id);
+    }
+
+    public ArchivoEditable original(Ambito ambito, Long id) {
+        DatosSello datos = datosDe(ambito, id);
+        if (datos.clave() == null) {
+            throw new RecursoNoEncontradoException(
+                    datos.nombre() + " no tiene un sello cargado.");
+        }
+        String clave = datos.originalClave() != null ? datos.originalClave() : datos.clave();
+        String mime = datos.originalClave() != null || !clave.toLowerCase().endsWith(".png")
+                ? "image/jpeg"
+                : "image/png";
+        return new ArchivoEditable(
+                almacen.leer(clave),
+                mime,
+                "sello-original" + ("image/png".equals(mime) ? ".png" : ".jpg"));
     }
 
     private DatosSello datosDe(Ambito ambito, Long id) {
         return switch (ambito) {
             case SINDICATO -> {
                 Sindicato entidad = sindicatoService.buscar(id);
-                yield new DatosSello(entidad.getNombre(), entidad.getSelloClave());
+                yield new DatosSello(entidad.getNombre(), entidad.getSelloClave(),
+                        entidad.getSelloOriginalClave());
             }
             case CENTRAL -> {
                 Central entidad = centralService.buscar(id);
-                yield new DatosSello(entidad.getNombre(), entidad.getSelloClave());
+                yield new DatosSello(entidad.getNombre(), entidad.getSelloClave(),
+                        entidad.getSelloOriginalClave());
             }
             case FEDERACION -> {
                 Federacion entidad = federacionService.buscar(id);
-                yield new DatosSello(entidad.getNombre(), entidad.getSelloClave());
+                yield new DatosSello(entidad.getNombre(), entidad.getSelloClave(),
+                        entidad.getSelloOriginalClave());
             }
         };
     }
 
-    private void asignarClave(Ambito ambito, Long id, String clave) {
+    private void asignarClaves(Ambito ambito, Long id, String clave, String originalClave) {
         switch (ambito) {
             case SINDICATO -> {
-                sindicatoService.buscar(id).setSelloClave(clave);
+                Sindicato entidad = sindicatoService.buscar(id);
+                entidad.setSelloClave(clave);
+                entidad.setSelloOriginalClave(originalClave);
                 sindicatoRepository.flush();
             }
             case CENTRAL -> {
-                centralService.buscar(id).setSelloClave(clave);
+                Central entidad = centralService.buscar(id);
+                entidad.setSelloClave(clave);
+                entidad.setSelloOriginalClave(originalClave);
                 centralRepository.flush();
             }
             case FEDERACION -> {
-                federacionService.buscar(id).setSelloClave(clave);
+                Federacion entidad = federacionService.buscar(id);
+                entidad.setSelloClave(clave);
+                entidad.setSelloOriginalClave(originalClave);
                 federacionRepository.flush();
             }
         }
     }
 
-    private record DatosSello(String nombre, String clave) {
+    private record DatosSello(String nombre, String clave, String originalClave) {
+    }
+
+    public record ArchivoEditable(byte[] contenido, String tipoMime, String nombreArchivo) {
     }
 }

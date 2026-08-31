@@ -4,13 +4,19 @@ import com.federa.backend.model.Productor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import jakarta.persistence.LockModeType;
 
 public interface ProductorRepository extends JpaRepository<Productor, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Productor p where p.id = :id")
+    Optional<Productor> findByIdParaRevisionSie(@Param("id") Long id);
 
     List<Productor> findBySindicatoId(Long sindicatoId);
 

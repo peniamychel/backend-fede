@@ -31,6 +31,13 @@ class TextosTest {
     }
 
     @Test
+    @DisplayName("conserva ñ y tildes al preparar texto para guardar")
+    void conservaCaracteresUnicodeAlGuardar() {
+        assertThat(Textos.normalizarParaGuardar("  José  Ángel  Peña Muñoz  "))
+                .isEqualTo("JOSÉ ÁNGEL PEÑA MUÑOZ");
+    }
+
+    @Test
     @DisplayName("descarta cualquier carácter que no sea letra o dígito")
     void descartaCaracteresRaros() {
         // La ñ, los puntos y las comas romperían la clave del almacén, que solo

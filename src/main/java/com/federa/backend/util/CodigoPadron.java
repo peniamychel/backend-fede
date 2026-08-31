@@ -8,7 +8,8 @@ import com.federa.backend.model.Productor;
  * {@code 2-IVI-1}.
  * <p>
  * Tres partes separadas por guion: el número de la federación, la sigla de la
- * central y el número del productor dentro de esa central. Se arma al momento
+ * central y el número del productor dentro de esa central. La letra A-H de
+ * una parcela compartida pertenece al número de lote, no a este código. Se arma al momento
  * de mostrarlo y no se guarda armado, así que el día que a una central le
  * pongan la sigla, todos sus productores muestran su código sin tocar una fila.
  */

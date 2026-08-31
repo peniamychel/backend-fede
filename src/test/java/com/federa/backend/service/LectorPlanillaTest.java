@@ -49,24 +49,30 @@ class LectorPlanillaTest {
     @DisplayName("los encabezados se reconocen sin importar tildes, puntos ni mayúsculas")
     void encabezadosTolerantes() {
         InputStream planilla = construir(hoja -> {
-            encabezados(hoja, "Central", "sindicato", "Nombres", "Apellidos", "C.I.", "N° LOTE",
-                    "Observaciones");
+            encabezados(hoja, "Central", "Abrev.", "sindicato", "Nombres", "Apellidos",
+                    "C.I.", "N° LOTE", "Ext.", "Clasificación", "Observaciones");
             Row fila = hoja.createRow(1);
             fila.createCell(0).setCellValue("1RO MAYO");
-            fila.createCell(1).setCellValue("1RO MAYO");
-            fila.createCell(2).setCellValue("JOAQUI");
-            fila.createCell(3).setCellValue("ROBLES");
-            fila.createCell(4).setCellValue("913516");
-            fila.createCell(5).setCellValue("74");
-            fila.createCell(6).setCellValue("falta foto");
+            fila.createCell(1).setCellValue("1MO");
+            fila.createCell(2).setCellValue("1RO MAYO");
+            fila.createCell(3).setCellValue("JOAQUI");
+            fila.createCell(4).setCellValue("ROBLES");
+            fila.createCell(5).setCellValue("913516");
+            fila.createCell(6).setCellValue("74");
+            fila.createCell(7).setCellValue("B");
+            fila.createCell(8).setCellValue("Sistema");
+            fila.createCell(9).setCellValue("falta foto");
         });
 
         LectorPlanilla.Fila fila = lector.leer(planilla).get(0);
 
         assertThat(fila.central()).isEqualTo("1RO MAYO");
+        assertThat(fila.abreviatura()).isEqualTo("1MO");
         assertThat(fila.apellidos()).isEqualTo("ROBLES");
         assertThat(fila.ci()).isEqualTo("913516");
         assertThat(fila.numeroLote()).isEqualTo("74");
+        assertThat(fila.extension()).isEqualTo("B");
+        assertThat(fila.clasificacion()).isEqualTo("Sistema");
         assertThat(fila.observaciones()).isEqualTo("falta foto");
     }
 

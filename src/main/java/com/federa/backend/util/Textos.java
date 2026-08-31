@@ -1,6 +1,7 @@
 package com.federa.backend.util;
 
 import java.text.Normalizer;
+import java.util.Locale;
 
 /**
  * Utilidades de normalización de texto para los datos que provienen de la
@@ -28,6 +29,20 @@ public final class Textos {
         return Normalizer.normalize(limpio, Normalizer.Form.NFD)
                 .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
                 .toUpperCase();
+    }
+
+    /**
+     * Prepara un texto para almacenarlo sin perder cómo se escribe el nombre.
+     * Conserva Ñ, tildes y demás caracteres Unicode; solo corrige espacios,
+     * deja una representación Unicode consistente y lo pasa a mayúsculas.
+     * <p>
+     * Para búsquedas, comparaciones o nombres de archivo se debe seguir usando
+     * {@link #normalizar(String)}, que sí elimina los diacríticos.
+     */
+    public static String normalizarParaGuardar(String valor) {
+        String limpio = limpiar(valor);
+        return limpio == null ? null
+                : Normalizer.normalize(limpio, Normalizer.Form.NFC).toUpperCase(Locale.ROOT);
     }
 
     /**

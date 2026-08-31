@@ -43,7 +43,8 @@ public record ImportacionResponse(
                 + "lote generan uno.", example = "3800")
         int lotes,
 
-        @Schema(description = "Centrales que la planilla menciona y no existían.",
+        @Schema(description = "Centrales que la planilla menciona y no están registradas. Sus "
+                + "filas se rechazan: deben crearse manualmente con su abreviatura.",
                 example = "[\"IVIRGARZAMA\", \"1RO MAYO\"]")
         List<String> centralesNuevas,
 

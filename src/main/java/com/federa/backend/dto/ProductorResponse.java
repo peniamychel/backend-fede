@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.EnumMap;
 import java.util.Map;
+import java.time.LocalDateTime;
 
 @Schema(description = "Productor afiliado, con su sindicato y central resueltos.")
 public record ProductorResponse(
@@ -16,7 +17,7 @@ public record ProductorResponse(
         @Schema(description = "Identificador interno.", example = "812")
         Long id,
 
-        @Schema(description = "Nombres, en mayúsculas y sin tildes.", example = "CONSTANTINA")
+        @Schema(description = "Nombres en mayúsculas, conservando Ñ y tildes.", example = "JOSÉ")
         String nombres,
 
         @Schema(description = "Apellidos. Puede ser null.", example = "HINOJOSA LA FUENTE")
@@ -75,10 +76,23 @@ public record ProductorResponse(
         String codigo,
 
         @Schema(description = "Código en el padrón: número de la federación, sigla de la "
-                + "central y número del productor dentro de esa central. Null mientras la "
-                + "federación no tenga número o la central no tenga sigla.",
-                example = "2-IVI-1")
+                + "central y correlativo. La letra A-H, si corresponde, se muestra junto "
+                + "al número de lote. Null mientras falte alguna parte base.",
+                example = "2-13J-78")
         String codigoPadron,
+
+        @Schema(description = "Si al abrir la ficha se debe hacer su única revisión SIE.",
+                example = "true")
+        boolean revisionSiePendiente,
+
+        @Schema(description = "Cantidad de veces que se confirmó la impresión del anverso.")
+        int credencialImpresiones,
+
+        @Schema(description = "Fecha y hora de la última impresión confirmada.")
+        LocalDateTime credencialUltimaImpresion,
+
+        @Schema(description = "Si tiene foto y los datos personales mínimos para imprimir.")
+        boolean credencialLista,
 
         Auditoria auditoria
 ) {
@@ -120,6 +134,21 @@ public record ProductorResponse(
                 imagenes.get(TipoImagen.ORIGINAL),
                 p.getCodigo(),
                 CodigoPadron.de(p),
+                p.isRevisionSiePendiente(),
+                p.getCredencialImpresiones(),
+                p.getCredencialUltimaImpresion(),
+                credencialLista(p, imagenes),
                 Auditoria.desde(p));
+    }
+
+    private static boolean credencialLista(Productor p, Map<TipoImagen, String> imagenes) {
+        String apellidos = p.getApellidosCorregidos() != null
+                ? p.getApellidosCorregidos() : p.getApellidos();
+        return p.isEstado()
+                && apellidos != null && !apellidos.isBlank()
+                && p.getCi() != null && !p.getCi().isBlank()
+                && p.getCorrelativo() != null
+                && CodigoPadron.de(p) != null
+                && imagenes.get(TipoImagen.MINIATURA) != null;
     }
 }

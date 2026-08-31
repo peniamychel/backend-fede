@@ -2,6 +2,7 @@ package com.federa.backend.service;
 
 import com.federa.backend.dto.CredencialProductor;
 import com.federa.backend.dto.DisenoCredencial;
+import com.federa.backend.almacen.AlmacenObjetos;
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
@@ -12,15 +13,19 @@ import com.lowagie.text.PageSize;
 import com.lowagie.text.Phrase;
 import com.lowagie.text.Rectangle;
 import com.lowagie.text.pdf.ColumnText;
+import com.lowagie.text.pdf.BaseFont;
 import com.lowagie.text.pdf.PdfContentByte;
 import com.lowagie.text.pdf.PdfWriter;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Dibuja las credenciales de los productores, del tamaño de una cédula.
@@ -60,6 +65,8 @@ public class CredencialProductorPdf {
     static final float AIRE = 12f;
 
     private static final Color GRIS_LINEA = new Color(170, 170, 170);
+    private static final Map<DisenoCredencial.Fuente, FamiliaFuente> FUENTES_CREDENCIAL =
+            cargarFuentesCredencial();
     private static final Font ROTULO = fuente(5.5f, Font.NORMAL, new Color(115, 115, 115));
     private static final Font VALOR = fuente(8f, Font.BOLD, Color.BLACK);
     private static final Font DATO_PLANTILLA = fuente(8f, Font.BOLD, Color.BLACK);
@@ -74,6 +81,17 @@ public class CredencialProductorPdf {
     /** Las copias conservan el mismo serial y OpenPDF incrusta cada fondo una sola vez. */
     private final Image plantillaCara = cargarPlantilla(PLANTILLA_CARA);
     private final Image plantillaReverso = cargarPlantilla(PLANTILLA_REVERSO);
+    private final AlmacenObjetos almacen;
+
+    /** Conserva el constructor usado por las pruebas unitarias. */
+    public CredencialProductorPdf() {
+        this.almacen = null;
+    }
+
+    @Autowired
+    public CredencialProductorPdf(AlmacenObjetos almacen) {
+        this.almacen = almacen;
+    }
 
     // -------------------------------------------------------- documentos
 
@@ -101,9 +119,11 @@ public class CredencialProductorPdf {
             PdfWriter escritor = PdfWriter.getInstance(documento, salida);
             documento.open();
             PdfContentByte lienzo = escritor.getDirectContent();
+            Image fondoCara = plantilla(DisenoCredencial.Cara.CARA, plantillaCara);
+            Image fondoReverso = plantilla(DisenoCredencial.Cara.REVERSO, plantillaReverso);
 
             if (cara != CaraCredencial.REVERSO) {
-                dibujarAnverso(lienzo, 0, 0, credencial, diseno);
+                dibujarAnverso(lienzo, 0, 0, credencial, diseno, fondoCara);
                 // Sin esto la página se descarta: para el documento está vacía,
                 // porque todo se pintó directamente sobre la hoja.
                 escritor.setPageEmpty(false);
@@ -112,7 +132,7 @@ public class CredencialProductorPdf {
                 documento.newPage();
             }
             if (cara != CaraCredencial.ANVERSO) {
-                dibujarReverso(lienzo, 0, 0, credencial, diseno);
+                dibujarReverso(lienzo, 0, 0, credencial, diseno, fondoReverso);
                 escritor.setPageEmpty(false);
             }
 
@@ -120,6 +140,45 @@ public class CredencialProductorPdf {
         } catch (DocumentException e) {
             throw new IllegalStateException(
                     "No se pudo generar la credencial de " + credencial.apellidos(), e);
+        }
+        return salida.toByteArray();
+    }
+
+    /**
+     * Trabajo para una impresora de tarjetas: una página CR80 por tarjeta y
+     * un solo lado. A diferencia del pliego carta, no acomoda varias tarjetas
+     * en una hoja porque la Zebra recibe físicamente una tarjeta por página.
+     */
+    public byte[] generarTarjetas(List<CredencialProductor> credenciales,
+                                  DisenoCredencial diseno,
+                                  CaraCredencial cara) {
+        if (credenciales == null || credenciales.isEmpty()) {
+            throw new IllegalArgumentException("Hace falta al menos una credencial");
+        }
+        if (cara == CaraCredencial.COMPLETA) {
+            throw new IllegalArgumentException("El trabajo masivo debe indicar una sola cara");
+        }
+        ByteArrayOutputStream salida = new ByteArrayOutputStream();
+        Document documento = new Document(new Rectangle(ANCHO, ALTO), 0, 0, 0, 0);
+        try {
+            PdfWriter escritor = PdfWriter.getInstance(documento, salida);
+            documento.open();
+            PdfContentByte lienzo = escritor.getDirectContent();
+            Image plantilla = cara == CaraCredencial.ANVERSO
+                    ? plantilla(DisenoCredencial.Cara.CARA, plantillaCara)
+                    : plantilla(DisenoCredencial.Cara.REVERSO, plantillaReverso);
+            for (int i = 0; i < credenciales.size(); i++) {
+                if (i > 0) documento.newPage();
+                if (cara == CaraCredencial.ANVERSO) {
+                    dibujarAnverso(lienzo, 0, 0, credenciales.get(i), diseno, plantilla);
+                } else {
+                    dibujarReverso(lienzo, 0, 0, credenciales.get(i), diseno, plantilla);
+                }
+                escritor.setPageEmpty(false);
+            }
+            documento.close();
+        } catch (DocumentException e) {
+            throw new IllegalStateException("No se pudo generar el trabajo de tarjetas", e);
         }
         return salida.toByteArray();
     }
@@ -145,6 +204,8 @@ public class CredencialProductorPdf {
             PdfWriter escritor = PdfWriter.getInstance(documento, salida);
             documento.open();
             PdfContentByte lienzo = escritor.getDirectContent();
+            Image fondoCara = plantilla(DisenoCredencial.Cara.CARA, plantillaCara);
+            Image fondoReverso = plantilla(DisenoCredencial.Cara.REVERSO, plantillaReverso);
 
             for (int desde = 0; desde < credenciales.size(); desde += POR_HOJA) {
                 List<CredencialProductor> tanda = credenciales.subList(
@@ -153,11 +214,11 @@ public class CredencialProductorPdf {
                 if (desde > 0) {
                     documento.newPage();
                 }
-                dibujarHoja(lienzo, tanda, false, diseno);
+                dibujarHoja(lienzo, tanda, false, diseno, fondoCara);
                 escritor.setPageEmpty(false);
 
                 documento.newPage();
-                dibujarHoja(lienzo, tanda, true, diseno);
+                dibujarHoja(lienzo, tanda, true, diseno, fondoReverso);
                 escritor.setPageEmpty(false);
             }
             documento.close();
@@ -168,13 +229,13 @@ public class CredencialProductorPdf {
     }
 
     private void dibujarHoja(PdfContentByte lienzo, List<CredencialProductor> tanda,
-                             boolean reverso, DisenoCredencial diseno) {
+                             boolean reverso, DisenoCredencial diseno, Image plantilla) {
         for (int i = 0; i < tanda.size(); i++) {
             float[] esquina = posicionEnHoja(i, reverso);
             if (reverso) {
-                dibujarReverso(lienzo, esquina[0], esquina[1], tanda.get(i), diseno);
+                dibujarReverso(lienzo, esquina[0], esquina[1], tanda.get(i), diseno, plantilla);
             } else {
-                dibujarAnverso(lienzo, esquina[0], esquina[1], tanda.get(i), diseno);
+                dibujarAnverso(lienzo, esquina[0], esquina[1], tanda.get(i), diseno, plantilla);
             }
         }
     }
@@ -217,8 +278,15 @@ public class CredencialProductorPdf {
 
     public void dibujarAnverso(PdfContentByte lienzo, float x, float y,
                                CredencialProductor c, DisenoCredencial diseno) {
-        fondo(lienzo, x, y, plantillaCara);
-        dibujarElementos(lienzo, x, y, c, diseno, DisenoCredencial.Cara.CARA);
+        dibujarAnverso(lienzo, x, y, c, diseno,
+                plantilla(DisenoCredencial.Cara.CARA, plantillaCara));
+    }
+
+    private void dibujarAnverso(PdfContentByte lienzo, float x, float y,
+                                CredencialProductor c, DisenoCredencial diseno,
+                                Image plantilla) {
+        dibujarElementos(lienzo, x, y, c, diseno, DisenoCredencial.Cara.CARA,
+                plantilla);
         marco(lienzo, x, y);
     }
 
@@ -232,17 +300,32 @@ public class CredencialProductorPdf {
 
     public void dibujarReverso(PdfContentByte lienzo, float x, float y,
                                CredencialProductor c, DisenoCredencial diseno) {
-        fondo(lienzo, x, y, plantillaReverso);
-        dibujarElementos(lienzo, x, y, c, diseno, DisenoCredencial.Cara.REVERSO);
+        dibujarReverso(lienzo, x, y, c, diseno,
+                plantilla(DisenoCredencial.Cara.REVERSO, plantillaReverso));
+    }
+
+    private void dibujarReverso(PdfContentByte lienzo, float x, float y,
+                                CredencialProductor c, DisenoCredencial diseno,
+                                Image plantilla) {
+        dibujarElementos(lienzo, x, y, c, diseno, DisenoCredencial.Cara.REVERSO,
+                plantilla);
         marco(lienzo, x, y);
     }
 
     private void dibujarElementos(PdfContentByte lienzo, float origenX, float origenY,
                                   CredencialProductor c, DisenoCredencial diseno,
-                                  DisenoCredencial.Cara cara) {
+                                  DisenoCredencial.Cara cara, Image plantilla) {
+        boolean tienePlantilla = diseno.elementos().stream()
+                .anyMatch(e -> e.cara() == cara
+                        && e.tipo() == DisenoCredencial.Tipo.PLANTILLA);
+        // Compatibilidad con diseños creados antes de que la plantilla fuera
+        // una capa: en ellos continúa ocupando el fondo.
+        if (!tienePlantilla) fondo(lienzo, origenX, origenY, plantilla);
         for (DisenoCredencial.Elemento e : diseno.elementos()) {
             if (e.cara() != cara) continue;
-            if (e.tipo() == DisenoCredencial.Tipo.TEXTO) {
+            if (e.tipo() == DisenoCredencial.Tipo.PLANTILLA) {
+                fondo(lienzo, origenX, origenY, plantilla);
+            } else if (e.tipo() == DisenoCredencial.Tipo.TEXTO) {
                 dibujarTexto(lienzo, origenX, origenY, c, e);
             } else if (e.tipo() == DisenoCredencial.Tipo.IMAGEN) {
                 dibujarImagen(lienzo, origenX, origenY, c, e);
@@ -256,7 +339,7 @@ public class CredencialProductorPdf {
                               CredencialProductor c, DisenoCredencial.Elemento e) {
         String texto = valorCampo(c, e);
         Font base = fuente(e.tamanoFuente(), e.negrita() ? Font.BOLD : Font.NORMAL,
-                color(e.color()));
+                color(e.color()), e.fuente());
         Font ajustada = ajustar(texto, base, e.ancho());
         float px = origenX + e.x();
         float py = origenY + e.y();
@@ -273,7 +356,7 @@ public class CredencialProductorPdf {
                                CredencialProductor c, DisenoCredencial.Elemento e) {
         float px = origenX + e.x();
         float py = origenY + e.y();
-        Image imagen = imagen(bytesImagen(c, e.campo()), e.ancho(), e.alto());
+        Image imagen = imagen(bytesImagen(c, e), e.ancho(), e.alto());
         if (imagen != null) {
             imagen.setAbsolutePosition(px + (e.ancho() - imagen.getScaledWidth()) / 2f,
                     py + (e.alto() - imagen.getScaledHeight()) / 2f);
@@ -296,7 +379,7 @@ public class CredencialProductorPdf {
             if ("PIE_SINDICATO".equals(e.campo())) {
                 return;
             }
-            Font aviso = fuente(e.tamanoFuente(), Font.BOLD, color(e.color()));
+            Font aviso = fuente(e.tamanoFuente(), Font.BOLD, color(e.color()), e.fuente());
             centrado(lienzo, "SIN FIRMANTE", aviso, x + ancho / 2f, y + alto * .48f);
             return;
         }
@@ -309,10 +392,11 @@ public class CredencialProductorPdf {
             return;
         }
         float factor = alto / 21f;
-        Font nombre = fuente(e.tamanoFuente(), Font.BOLD, color(e.color()));
-        Font cargo = fuente(Math.max(3f, e.tamanoFuente() - .2f), Font.BOLD, color(e.color()));
+        Font nombre = fuente(e.tamanoFuente(), Font.BOLD, color(e.color()), e.fuente());
+        Font cargo = fuente(Math.max(3f, e.tamanoFuente() - .2f), Font.BOLD,
+                color(e.color()), e.fuente());
         Font organizacion = fuente(Math.max(3f, e.tamanoFuente() - .4f), Font.NORMAL,
-                color(e.color()));
+                color(e.color()), e.fuente());
         centrado(lienzo, firmante.nombre(),
                 ajustar(firmante.nombre(), nombre, ancho),
                 x + ancho / 2f, y + 15f * factor);
@@ -343,8 +427,11 @@ public class CredencialProductorPdf {
         return valor(texto);
     }
 
-    private byte[] bytesImagen(CredencialProductor c, String campo) {
-        return switch (campo) {
+    private byte[] bytesImagen(CredencialProductor c, DisenoCredencial.Elemento e) {
+        if (DisenoCredencial.CAMPO_IMAGEN_PERSONALIZADA.equals(e.campo())) {
+            return imagenPersonalizada(e.recurso());
+        }
+        return switch (e.campo()) {
             case "FOTO" -> c.foto();
             case "QR" -> c.qr();
             case "SELLO_FEDERACION" -> c.selloFederacion();
@@ -355,6 +442,14 @@ public class CredencialProductorPdf {
             case "FIRMA_SINDICATO" -> firma(c.secretarioGeneralSindicato());
             default -> null;
         };
+    }
+
+    private byte[] imagenPersonalizada(String recurso) {
+        if (almacen == null || recurso == null || recurso.isBlank()
+                || !almacen.existe(recurso)) {
+            return null;
+        }
+        return almacen.leer(recurso);
     }
 
     private byte[] firma(CredencialProductor.Firmante firmante) {
@@ -375,6 +470,17 @@ public class CredencialProductorPdf {
         fondo.scaleAbsolute(ANCHO, ALTO);
         fondo.setAbsolutePosition(x, y);
         agregar(lienzo, fondo);
+    }
+
+    private Image plantilla(DisenoCredencial.Cara cara, Image predeterminada) {
+        if (almacen == null) return predeterminada;
+        String clave = DisenoCredencialService.clavePlantilla(cara);
+        if (!almacen.existe(clave)) return predeterminada;
+        try {
+            return Image.getInstance(almacen.leer(clave));
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo leer la plantilla personalizada", e);
+        }
     }
 
     private static Image cargarPlantilla(String recurso) {
@@ -437,6 +543,9 @@ public class CredencialProductorPdf {
             return base;
         }
         float tamano = Math.max(base.getSize() * anchoMaximo / ancho, 4.5f);
+        if (base.getBaseFont() != null) {
+            return new Font(base.getBaseFont(), tamano, base.getStyle(), base.getColor());
+        }
         return FontFactory.getFont(FontFactory.HELVETICA, tamano, base.getStyle(),
                 base.getColor());
     }
@@ -490,5 +599,56 @@ public class CredencialProductorPdf {
 
     private static Font fuente(float tamano, int estilo, Color color) {
         return FontFactory.getFont(FontFactory.HELVETICA, tamano, estilo, color);
+    }
+
+    private static Font fuente(float tamano, int estilo, Color color,
+                               DisenoCredencial.Fuente fuente) {
+        DisenoCredencial.Fuente seleccion = fuente == null
+                ? DisenoCredencial.Fuente.ROBOTO : fuente;
+        FamiliaFuente familia = FUENTES_CREDENCIAL.get(seleccion);
+        BaseFont base = (estilo & Font.BOLD) != 0 ? familia.negrita() : familia.regular();
+        // El peso ya está contenido en el archivo TTF; no se vuelve a simular
+        // con Font.BOLD para evitar que el PDF engrose dos veces el trazo.
+        return new Font(base, tamano, Font.NORMAL, color);
+    }
+
+    private static Map<DisenoCredencial.Fuente, FamiliaFuente> cargarFuentesCredencial() {
+        EnumMap<DisenoCredencial.Fuente, FamiliaFuente> fuentes =
+                new EnumMap<>(DisenoCredencial.Fuente.class);
+        fuentes.put(DisenoCredencial.Fuente.ROBOTO, familia("Roboto"));
+        fuentes.put(DisenoCredencial.Fuente.MONTSERRAT, familia("Montserrat"));
+        fuentes.put(DisenoCredencial.Fuente.MERRIWEATHER, familia("Merriweather"));
+        fuentes.put(DisenoCredencial.Fuente.LATO, familia("Lato"));
+        fuentes.put(DisenoCredencial.Fuente.UBUNTU, familia("Ubuntu"));
+        fuentes.put(DisenoCredencial.Fuente.PT_SANS, familia("PTSans"));
+        fuentes.put(DisenoCredencial.Fuente.BARLOW, familia("Barlow"));
+        fuentes.put(DisenoCredencial.Fuente.ALEGREYA_SANS, familia("AlegreyaSans"));
+        fuentes.put(DisenoCredencial.Fuente.TITILLIUM_WEB, familia("TitilliumWeb"));
+        fuentes.put(DisenoCredencial.Fuente.ANTON, familia("Anton"));
+        fuentes.put(DisenoCredencial.Fuente.CRIMSON_TEXT, familia("CrimsonText"));
+        fuentes.put(DisenoCredencial.Fuente.SPECTRAL, familia("Spectral"));
+        fuentes.put(DisenoCredencial.Fuente.CARDO, familia("Cardo"));
+        return Map.copyOf(fuentes);
+    }
+
+    private static FamiliaFuente familia(String nombre) {
+        return new FamiliaFuente(
+                cargarFuente("/fonts/credencial/" + nombre + "-Regular.ttf"),
+                cargarFuente("/fonts/credencial/" + nombre + "-Bold.ttf"));
+    }
+
+    private static BaseFont cargarFuente(String recurso) {
+        try (InputStream entrada = CredencialProductorPdf.class.getResourceAsStream(recurso)) {
+            if (entrada == null) {
+                throw new IllegalStateException("No se encontró la fuente " + recurso);
+            }
+            return BaseFont.createFont(recurso, BaseFont.IDENTITY_H, BaseFont.EMBEDDED,
+                    true, entrada.readAllBytes(), null);
+        } catch (IOException | DocumentException e) {
+            throw new IllegalStateException("No se pudo cargar la fuente " + recurso, e);
+        }
+    }
+
+    private record FamiliaFuente(BaseFont regular, BaseFont negrita) {
     }
 }

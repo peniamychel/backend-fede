@@ -130,6 +130,7 @@ public class ProductorService {
         // orígenes distintos de archivos que apuntan a la misma persona.
         List<String> claves = new ArrayList<>(imagenRepository.findClavesPorProductor(id));
         claves.addAll(imagenCargoRepository.findClavesPorProductor(id));
+        claves.addAll(imagenCargoRepository.findClavesOriginalesPorProductor(id));
 
         productorRepository.delete(productor);
 
@@ -165,11 +166,11 @@ public class ProductorService {
         // Antes de pisarlo: de dónde venía decide si conserva su número o le
         // toca uno nuevo.
         Sindicato anterior = productor.getSindicato();
-        productor.setNombres(Textos.normalizar(request.nombres()));
-        productor.setApellidos(Textos.normalizar(request.apellidos()));
+        productor.setNombres(Textos.normalizarParaGuardar(request.nombres()));
+        productor.setApellidos(Textos.normalizarParaGuardar(request.apellidos()));
         productor.setCi(Textos.limpiar(request.ci()));
-        productor.setNombresCorregidos(Textos.normalizar(request.nombresCorregidos()));
-        productor.setApellidosCorregidos(Textos.normalizar(request.apellidosCorregidos()));
+        productor.setNombresCorregidos(Textos.normalizarParaGuardar(request.nombresCorregidos()));
+        productor.setApellidosCorregidos(Textos.normalizarParaGuardar(request.apellidosCorregidos()));
         productor.setFotoDescripcion(Textos.limpiar(request.fotoDescripcion()));
         productor.setMarcado(Boolean.TRUE.equals(request.marcado()));
         productor.setSindicato(sindicato);

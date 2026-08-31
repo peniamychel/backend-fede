@@ -32,7 +32,8 @@ public class GeneradorPlantilla {
 
     /** Segunda fila de ejemplo, para que se vea que los datos se repiten. */
     private static final String[] SEGUNDO_EJEMPLO = {
-            "IVIRGARZAMA", "LIBERTAD", "JUAN", "PEREZ", "8005906-1V", "75", ""
+            "IVI", "IVIRGARZAMA", "LIBERTAD", "JUAN", "PEREZ", "8005906-1V", "75",
+            "", "SIN SISTEMA", ""
     };
 
     public byte[] generar() {
@@ -123,6 +124,12 @@ public class GeneradorPlantilla {
         f = escribir(hoja, f, "Detalles que conviene saber", titulo);
         f = escribir(hoja, f, "• La federación no va en la planilla: se elige en la app "
                 + "al importar.", null);
+        f = escribir(hoja, f, "• ABREVIATURA debe coincidir con la sigla registrada en la "
+                + "central. El importador nunca crea centrales.", null);
+        f = escribir(hoja, f, "• CLASIFICACION admite: SIN SISTEMA, SISTEMA, BLANCO, "
+                + "FRACCIONADO, DETALLISTA o COMUNITARIO.", null);
+        f = escribir(hoja, f, "• EXTENSION (A-H) es una referencia. La letra definitiva se "
+                + "recalcula automáticamente y SISTEMA tiene prioridad.", null);
         f = escribir(hoja, f, "• Un guion « - » en C.I o N° LOTE se entiende como dato "
                 + "ausente, igual que dejar la celda vacía.", null);
         f = escribir(hoja, f, "• Nombres y apellidos se guardan en MAYÚSCULAS y sin tildes; "
@@ -131,8 +138,10 @@ public class GeneradorPlantilla {
                 + "tiene 27 y 208 repetidos, y no se rechazan.", null);
         f = escribir(hoja, f, "• En OBSERVACIONES podés poner varios motivos separados por "
                 + "coma; cada uno se guarda por separado para poder resolverlos de a uno.", null);
-        f = escribir(hoja, f, "• Si una central o un sindicato no existe todavía, la app te "
-                + "los muestra antes de crear nada y vos decidís.", null);
+        f = escribir(hoja, f, "• Si una central no existe, esas filas no se importan: primero "
+                + "hay que crearla manualmente con su abreviatura.", null);
+        f = escribir(hoja, f, "• Los sindicatos que no existan se muestran en una lista y solo "
+                + "se crean después de que los apruebes.", null);
         f++;
         escribir(hoja, f, "Al subirla, la app primero analiza sin escribir nada. "
                 + "Recién confirmás después de ver el resultado.", titulo);

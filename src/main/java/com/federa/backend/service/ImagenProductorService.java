@@ -109,6 +109,12 @@ public class ImagenProductorService {
         ImagenResponse miniatura = guardarVariante(
                 productor, TipoImagen.MINIATURA, origen, nombreArchivo);
 
+        // La lista general muestra primero lo último trabajado. Las imágenes
+        // viven en otra tabla, así que su auditoría no tocaría al productor por
+        // sí sola; marcarlo como modificado hace que la foto recién cargada lo
+        // lleve al inicio igual que una edición de sus datos.
+        productor.setUpdatedAt(LocalDateTime.now());
+
         // Se informa el tamaño de lo que subió el usuario, no el del recorte:
         // es lo que le permite entender cuánto se ahorró respecto de su archivo.
         return new ImagenSubidaResponse(

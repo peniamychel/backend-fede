@@ -49,9 +49,14 @@ public class ImagenCargoService {
     }
 
     /** Sube o reemplaza una de las dos imágenes de un período. */
-    @Transactional
     public CargoResponse guardar(Long cargoId, TipoImagenCargo tipo, byte[] subido,
                                  String nombreArchivo) {
+        return guardar(cargoId, tipo, subido, nombreArchivo, null);
+    }
+
+    @Transactional
+    public CargoResponse guardar(Long cargoId, TipoImagenCargo tipo, byte[] subido,
+                                 String nombreArchivo, byte[] originalSubido) {
         Cargo cargo = buscar(cargoId);
         verificarQuePuedeFirmar(cargo);
         if (tipo == TipoImagenCargo.PIE_FIRMA
@@ -64,6 +69,8 @@ public class ImagenCargoService {
         BufferedImage origen = procesador.leer(subido);
         ProcesadorImagenes.Variante variante = procesador.generarPng(
                 origen, TipoImagenCargo.LADO_MAXIMO, TipoImagenCargo.PESO_MAXIMO);
+        ProcesadorImagenes.Variante original = procesador.prepararOriginalEditable(
+                originalSubido == null ? subido : originalSubido);
 
         // Se trabaja sobre la colección del cargo y no sobre el repositorio.
         // La relación tiene cascade y orphanRemoval: manipular las filas por
@@ -78,10 +85,14 @@ public class ImagenCargoService {
         }
 
         String claveAnterior = imagen.getClave();
+        String originalAnterior = imagen.getOriginalClave();
         String claveNueva = nuevaClave(cargo, tipo);
+        String originalNueva = nuevaClaveOriginal(cargo, tipo);
 
         almacen.guardar(claveNueva, variante.contenido());
         alDeshacer(() -> almacen.borrar(claveNueva));
+        almacen.guardar(originalNueva, original.contenido());
+        alDeshacer(() -> almacen.borrar(originalNueva));
 
         imagen.setClave(claveNueva);
         imagen.setTipoMime(variante.tipoMime());
@@ -89,10 +100,14 @@ public class ImagenCargoService {
         imagen.setAncho(variante.ancho());
         imagen.setAlto(variante.alto());
         imagen.setNombreOriginal(recortar(nombreArchivo));
+        imagen.setOriginalClave(originalNueva);
         imagenRepository.flush();
 
         if (claveAnterior != null) {
             alConfirmar(() -> almacen.borrar(claveAnterior));
+        }
+        if (originalAnterior != null) {
+            alConfirmar(() -> almacen.borrar(originalAnterior));
         }
 
         return CargoResponse.desde(cargo);
@@ -109,6 +124,7 @@ public class ImagenCargoService {
         }
 
         String clave = imagen.getClave();
+        String originalClave = imagen.getOriginalClave();
         // Sacarla de la colección es lo que dispara el borrado, gracias a
         // orphanRemoval. El flush lo aplica ya, para que la respuesta refleje
         // el estado nuevo y no el anterior.
@@ -116,6 +132,9 @@ public class ImagenCargoService {
         imagenRepository.flush();
 
         alConfirmar(() -> almacen.borrar(clave));
+        if (originalClave != null) {
+            alConfirmar(() -> almacen.borrar(originalClave));
+        }
 
         return CargoResponse.desde(cargo);
     }
@@ -134,7 +153,27 @@ public class ImagenCargoService {
      * lleva las filas, pero los archivos del almacén no los conoce JPA.
      */
     List<String> clavesDeProductor(Long productorId) {
-        return imagenRepository.findClavesPorProductor(productorId);
+        List<String> claves = new java.util.ArrayList<>(
+                imagenRepository.findClavesPorProductor(productorId));
+        claves.addAll(imagenRepository.findClavesOriginalesPorProductor(productorId));
+        return claves;
+    }
+
+    public ArchivoEditable original(Long cargoId, TipoImagenCargo tipo) {
+        Cargo cargo = buscar(cargoId);
+        ImagenCargo imagen = buscarEn(cargo, tipo);
+        if (imagen == null) {
+            throw new RecursoNoEncontradoException(
+                    "Este período no tiene " + tipo.getEtiqueta().toLowerCase() + " cargada.");
+        }
+        String clave = imagen.getOriginalClave() != null
+                ? imagen.getOriginalClave()
+                : imagen.getClave();
+        String mime = imagen.getOriginalClave() != null ? "image/jpeg" : imagen.getTipoMime();
+        String extension = "image/png".equalsIgnoreCase(mime) ? ".png" : ".jpg";
+        return new ArchivoEditable(
+                almacen.leer(clave), mime,
+                "original-" + tipo.name().toLowerCase() + extension);
     }
 
     private Cargo buscar(Long cargoId) {
@@ -171,6 +210,17 @@ public class ImagenCargoService {
         String nombre = Textos.paraNombreDeArchivo(
                 cargo.getProductor().getNombreCompleto(), 40);
         return tipo.getDirectorio() + "/" + aleatorio + "-" + nombre + ".png";
+    }
+
+    private String nuevaClaveOriginal(Cargo cargo, TipoImagenCargo tipo) {
+        String aleatorio = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String nombre = Textos.paraNombreDeArchivo(
+                cargo.getProductor().getNombreCompleto(), 40);
+        return "originales-directorio/" + tipo.getDirectorio() + "/"
+                + aleatorio + "-" + nombre + ".jpg";
+    }
+
+    public record ArchivoEditable(byte[] contenido, String tipoMime, String nombreArchivo) {
     }
 
     private String recortar(String nombre) {

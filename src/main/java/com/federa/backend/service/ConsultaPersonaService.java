@@ -28,8 +28,8 @@ public class ConsultaPersonaService {
                     NO_DISPONIBLE, null, null, resultado.mensaje());
             case ENCONTRADA -> {
                 PersonaSieClient.PersonaSie persona = resultado.persona();
-                String nombres = Textos.normalizar(persona.nombre());
-                String apellidos = Textos.normalizar(unir(
+                String nombres = Textos.normalizarParaGuardar(persona.nombre());
+                String apellidos = Textos.normalizarParaGuardar(unir(
                         persona.paterno(), persona.materno()));
                 if (nombres == null) {
                     yield new ConsultaPersonaResponse(NO_DISPONIBLE, null, null,

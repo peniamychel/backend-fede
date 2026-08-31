@@ -18,15 +18,16 @@ import com.federa.backend.util.Textos;
  * FRANSIONADOS (16), FRACCIONADO (7),
  * FRACCION (2)                          -> FRACCIONADO
  * DETALLISTA (5)                        -> DETALLISTA
+ * COMUNITARIO                           -> COMUNITARIO
  * NUEVO (2)                             -> NUEVO
  * </pre>
  */
 public enum EstadoLote {
 
-    /** Lote registrado en el sistema (incluye "SISTEMA", "C-S", "SI"). */
+    /** Lote con un sistema físico instalado (incluye "SISTEMA", "C-S", "SI"). */
     CON_SISTEMA,
 
-    /** Lote aún no registrado en el sistema (incluye "NO"). */
+    /** Lote sin un sistema físico instalado (incluye "NO"). */
     SIN_SISTEMA,
 
     /** Lote en blanco / sin asignar. */
@@ -37,6 +38,9 @@ public enum EstadoLote {
 
     /** Lote clasificado como detallista. */
     DETALLISTA,
+
+    /** Lote destinado al sistema comunitario. */
+    COMUNITARIO,
 
     /** Alta reciente, todavía sin clasificar. */
     NUEVO,
@@ -50,12 +54,13 @@ public enum EstadoLote {
             return null;
         }
         return switch (v) {
-            case "SISTEMA", "SISTEMAS", "CON SISTEMA", "C-S", "CS", "SI",
+            case "SISTEMA", "SISTEMAS", "CON SISTEMA", "CON_SISTEMA", "C-S", "CS", "SI",
                  "CON SISTEMA DETALLISTA" -> CON_SISTEMA;
-            case "SIN SISTEMA", "NO" -> SIN_SISTEMA;
+            case "SIN SISTEMA", "SIN_SISTEMA", "NO" -> SIN_SISTEMA;
             case "BLANCO" -> BLANCO;
             case "FRACCIONADO", "FRACCION", "FRANSIONADOS", "FRACCIONADOS" -> FRACCIONADO;
             case "DETALLISTA" -> DETALLISTA;
+            case "COMUNITARIO", "COMUNITARIA" -> COMUNITARIO;
             case "NUEVO" -> NUEVO;
             default -> DESCONOCIDO;
         };

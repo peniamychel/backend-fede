@@ -44,6 +44,9 @@ class ImagenCargoServiceTest {
         when(procesador.leer(subido)).thenReturn(origen);
         when(procesador.generarPng(eq(origen), anyInt(), anyInt()))
                 .thenReturn(new ProcesadorImagenes.Variante(png, 80, 30, "image/png"));
+        when(procesador.prepararOriginalEditable(subido))
+                .thenReturn(new ProcesadorImagenes.Variante(
+                        new byte[]{6, 7}, 80, 30, "image/jpeg"));
 
         CargoResponse respuesta = servicio.guardar(
                 7L, TipoImagenCargo.PIE_FIRMA, subido, "pie.jpg");
@@ -51,6 +54,8 @@ class ImagenCargoServiceTest {
         assertThat(respuesta.pieFirmaUrl()).startsWith("/api/v1/archivos/pies-firma/");
         assertThat(respuesta.firmaUrl()).isNull();
         verify(almacen).guardar(cargo.getImagenes().get(0).getClave(), png);
+        assertThat(cargo.getImagenes().get(0).getOriginalClave())
+                .startsWith("originales-directorio/pies-firma/");
     }
 
     @Test

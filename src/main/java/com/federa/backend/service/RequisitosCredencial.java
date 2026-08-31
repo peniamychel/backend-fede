@@ -62,7 +62,8 @@ public class RequisitosCredencial {
         return faltantes;
     }
 
-    public List<Faltante> delProductor(Productor productor, boolean tieneFoto) {
+    public List<Faltante> delProductor(Productor productor, boolean tieneFoto,
+                                       boolean tieneNumeroLote) {
         List<Faltante> faltantes = new ArrayList<>();
         if (vacio(apellidosDe(productor))) {
             faltantes.add(new Faltante("Apellidos",
@@ -76,6 +77,11 @@ public class RequisitosCredencial {
         if (!tieneFoto) {
             faltantes.add(new Faltante("Fotografía", "La tarjeta saldría con el recuadro vacío",
                     EN_LA_FICHA + " → Fotografía"));
+        }
+        if (!tieneNumeroLote) {
+            faltantes.add(new Faltante("Número de lote",
+                    "Debe tener al menos una parcela vigente con número para imprimir su carnet",
+                    EN_LA_FICHA + " → Cambiar número de lote"));
         }
         if (productor.getCorrelativo() == null) {
             faltantes.add(new Faltante("Número en la central",

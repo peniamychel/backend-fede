@@ -14,6 +14,7 @@ import com.federa.backend.repository.CargoRepository;
 import com.federa.backend.repository.LoteRepository;
 import com.federa.backend.repository.ProductorRepository;
 import com.federa.backend.repository.SindicatoRepository;
+import com.federa.backend.util.CodigoLote;
 import com.federa.backend.util.CodigoPadron;
 import com.federa.backend.util.Textos;
 import org.slf4j.Logger;
@@ -130,14 +131,15 @@ public class InformeSindicatoService {
         return porProductor;
     }
 
-    /** Reproduce {@code Lote.getCodigo()} sobre la proyección: "66-A" o "66". */
+    /** Identifica el lote y coloca la letra compartida junto al número: "66 A". */
     private String codigoDeLote(Object[] fila) {
         String numero = (String) fila[1];
         if (numero == null) {
             return null;
         }
         ExtensionLote extension = (ExtensionLote) fila[2];
-        return extension != null ? numero + "-" + extension.name() : numero;
+        String letraCompartida = (String) fila[3];
+        return CodigoLote.de(numero, extension, letraCompartida);
     }
 
     // ------------------------------------------------------------ dirigente

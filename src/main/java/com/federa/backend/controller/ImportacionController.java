@@ -73,7 +73,8 @@ public class ImportacionController {
     @Operation(summary = "Importa productores desde una planilla .xlsx",
             description = """
                     Columnas esperadas en la primera fila: CENTRAL, SINDICATO y NOMBRES son \
-                    obligatorias; APELLIDOS, C.I, N° LOTE y OBSERVACIONES son opcionales. Los \
+                    obligatorias; ABREVIATURA, APELLIDOS, C.I, N° LOTE, EXTENSION, \
+                    CLASIFICACION y OBSERVACIONES son opcionales. Los \
                     encabezados se reconocen sin distinguir mayúsculas, tildes ni puntuación.
 
                     Con `simular=true` —el valor por defecto— no se escribe nada: el proceso \
@@ -98,8 +99,9 @@ public class ImportacionController {
                     + "para que una llamada mal armada no modifique el padrón.")
             @RequestParam(defaultValue = "true") boolean simular,
 
-            @Parameter(description = "Da de alta las centrales y sindicatos que la planilla "
-                    + "mencione y no existan. Con false, esas filas se rechazan.")
+            @Parameter(description = "Aprueba crear los sindicatos que la planilla mencione y "
+                    + "no existan. Las centrales nunca se crean durante una importación: deben "
+                    + "registrarse manualmente con su abreviatura.")
             @RequestParam(defaultValue = "false") boolean crearJerarquia,
 
             @Parameter(description = "Con false, una sola fila inválida aborta todo y no se "

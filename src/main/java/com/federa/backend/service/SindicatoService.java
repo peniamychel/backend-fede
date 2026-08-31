@@ -85,7 +85,7 @@ public class SindicatoService {
     @Transactional
     public SindicatoResponse crear(SindicatoRequest request) {
         Central central = centralService.buscar(request.centralId());
-        String nombre = Textos.normalizar(request.nombre());
+        String nombre = Textos.normalizarParaGuardar(request.nombre());
         String numero = Textos.limpiar(request.numero());
         verificarNombreLibre(central.getId(), nombre, null);
         verificarNumeroLibre(numero, null);
@@ -101,7 +101,7 @@ public class SindicatoService {
     public SindicatoResponse actualizar(Long id, SindicatoRequest request) {
         Sindicato sindicato = buscar(id);
         Central central = centralService.buscar(request.centralId());
-        String nombre = Textos.normalizar(request.nombre());
+        String nombre = Textos.normalizarParaGuardar(request.nombre());
         String numero = Textos.limpiar(request.numero());
         verificarNombreLibre(central.getId(), nombre, id);
         verificarNumeroLibre(numero, id);

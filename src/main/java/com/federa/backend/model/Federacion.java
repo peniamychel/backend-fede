@@ -59,6 +59,9 @@ public class Federacion extends EntidadAuditable {
     @Column(name = "sello_clave", length = 200)
     private String selloClave;
 
+    @Column(name = "sello_original_clave", length = 200)
+    private String selloOriginalClave;
+
     @JsonIgnore
     @Builder.Default
     @OneToMany(mappedBy = "federacion", cascade = CascadeType.ALL, orphanRemoval = true)

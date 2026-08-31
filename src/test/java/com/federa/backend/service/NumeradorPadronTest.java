@@ -1,12 +1,19 @@
 package com.federa.backend.service;
 
+import com.federa.backend.model.Central;
+import com.federa.backend.repository.CentralRepository;
+import com.federa.backend.repository.ProductorRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * La regla del 666 al repartir números del padrón.
@@ -93,5 +100,19 @@ class NumeradorPadronTest {
         // moverla: el que sigue al 700 es el 701.
         assertThat(NumeradorPadron.despuesDe(700)).isEqualTo(701);
         assertThat(NumeradorPadron.admisible(700)).isEqualTo(700);
+    }
+
+    @Test
+    @DisplayName("el siguiente sale del máximo de la central bajo bloqueo")
+    void siguienteDeLaCentral() {
+        ProductorRepository productores = mock(ProductorRepository.class);
+        CentralRepository centrales = mock(CentralRepository.class);
+        when(centrales.findByIdParaNumerar(13L))
+                .thenReturn(Optional.of(Central.builder().id(13L).build()));
+        when(productores.maxCorrelativoDeCentral(13L, null)).thenReturn(44);
+        NumeradorPadron numerador = new NumeradorPadron(productores, centrales);
+
+        assertThat(numerador.siguiente(13L)).isEqualTo(45);
+        verify(centrales).findByIdParaNumerar(13L);
     }
 }

@@ -7,10 +7,12 @@ import com.federa.backend.dto.EstadoRequest;
 import com.federa.backend.dto.ProductorDetalleResponse;
 import com.federa.backend.dto.ProductorRequest;
 import com.federa.backend.dto.ProductorResponse;
+import com.federa.backend.dto.RevisionSieProductorResponse;
 import com.federa.backend.service.CaraCredencial;
 import com.federa.backend.service.CredencialService;
 import com.federa.backend.service.DirectorioService;
 import com.federa.backend.service.ProductorService;
+import com.federa.backend.service.RevisionSieProductorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,13 +40,16 @@ public class ProductorController {
     private final ProductorService productorService;
     private final DirectorioService directorioService;
     private final CredencialService credencialService;
+    private final RevisionSieProductorService revisionSieService;
 
     public ProductorController(ProductorService productorService,
                                DirectorioService directorioService,
-                               CredencialService credencialService) {
+                               CredencialService credencialService,
+                               RevisionSieProductorService revisionSieService) {
         this.productorService = productorService;
         this.directorioService = directorioService;
         this.credencialService = credencialService;
+        this.revisionSieService = revisionSieService;
     }
 
     @GetMapping
@@ -57,7 +62,7 @@ public class ProductorController {
             @Parameter(description = "Acota a una central") @RequestParam(required = false) Long centralId,
             @Parameter(description = "Busca en nombres, apellidos y cédula")
             @RequestParam(required = false) String texto,
-            @PageableDefault(size = 25, sort = {"apellidos", "nombres"}, direction = Sort.Direction.ASC)
+            @PageableDefault(size = 25, sort = "updatedAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
         return new PagedModel<>(productorService.listar(sindicatoId, centralId, texto, pageable));
     }
@@ -88,6 +93,22 @@ public class ProductorController {
     @Operation(summary = "Ficha completa: datos del productor, sus lotes y sus imágenes")
     public ProductorDetalleResponse obtener(@PathVariable Long id) {
         return productorService.obtener(id);
+    }
+
+    @PostMapping("/{id}/revision-sie")
+    @Operation(summary = "Realiza la revisión SIE pendiente de un productor importado",
+            description = "Solo consulta SIE una vez. Si SIE está temporalmente indisponible, "
+                    + "la revisión permanece pendiente para otra apertura.")
+    public RevisionSieProductorResponse revisarConSie(@PathVariable Long id) {
+        return revisionSieService.revisar(id);
+    }
+
+    @PostMapping("/{id}/verificacion-sie")
+    @Operation(summary = "Verifica manualmente los datos actuales del productor en SIE",
+            description = "Acción temporal para revisar registros existentes. Consulta SIE "
+                    + "cada vez que el usuario la confirma y corrige nombres y apellidos si difieren.")
+    public RevisionSieProductorResponse verificarManualmenteConSie(@PathVariable Long id) {
+        return revisionSieService.verificarManualmente(id);
     }
 
     @GetMapping(value = "/{id}/credencial.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
@@ -123,10 +144,20 @@ public class ProductorController {
         return credencialService.previa(id);
     }
 
+    @PostMapping("/{id}/credencial/impresion")
+    @Operation(summary = "Registra una impresión manual del anverso de la credencial")
+    public ProductorResponse confirmarImpresionCredencial(@PathVariable Long id) {
+        return credencialService.confirmarAnversoImpreso(id);
+    }
+
     static ResponseEntity<byte[]> comoAdjunto(CredencialService.Descarga descarga) {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"" + descarga.nombreArchivo() + "\"")
+                // El contenido depende del diseño y de la plantilla vigentes.
+                // Aunque la URL no cambie, nunca debe reutilizarse un PDF anterior.
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate")
+                .header(HttpHeaders.PRAGMA, "no-cache")
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(descarga.contenido());
     }
@@ -142,8 +173,7 @@ public class ProductorController {
 
     @PostMapping
     @Operation(summary = "Registra un productor",
-            description = "Nombres y apellidos se guardan normalizados en mayúsculas y sin tildes, "
-                    + "siguiendo la convención de la planilla.")
+            description = "Nombres y apellidos se guardan en mayúsculas conservando Ñ y tildes.")
     public ResponseEntity<ProductorResponse> crear(@Valid @RequestBody ProductorRequest request) {
         ProductorResponse creado = productorService.crear(request);
         return ResponseEntity.created(URI.create(ApiRutas.V1 + "/productores/" + creado.id())).body(creado);

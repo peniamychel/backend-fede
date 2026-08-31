@@ -11,6 +11,8 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -51,7 +53,8 @@ public class ImagenCargoController {
             @Parameter(description = "Archivo de imagen, en cualquier tamaño.", required = true,
                     content = @Content(mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
                             schema = @Schema(type = "string", format = "binary")))
-            @RequestPart("archivo") MultipartFile archivo) {
+            @RequestPart("archivo") MultipartFile archivo,
+            @RequestPart(value = "original", required = false) MultipartFile original) {
 
         if (archivo == null || archivo.isEmpty()) {
             throw new ArchivoInvalidoException("No llegó ninguna imagen, o vino vacía.");
@@ -59,10 +62,23 @@ public class ImagenCargoController {
 
         try {
             return imagenCargoService.guardar(cargoId, tipo, archivo.getBytes(),
-                    archivo.getOriginalFilename());
+                    archivo.getOriginalFilename(),
+                    original == null || original.isEmpty() ? null : original.getBytes());
         } catch (IOException e) {
             throw new ArchivoInvalidoException("No se pudo leer el archivo subido.", e);
         }
+    }
+
+    @GetMapping("/{tipo}/original")
+    @Operation(summary = "Descarga el original editable de una firma o pie de firma")
+    public ResponseEntity<byte[]> original(@PathVariable Long cargoId,
+                                           @PathVariable TipoImagenCargo tipo) {
+        ImagenCargoService.ArchivoEditable archivo = imagenCargoService.original(cargoId, tipo);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(archivo.tipoMime()))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"" + archivo.nombreArchivo().replace("\"", "") + "\"")
+                .body(archivo.contenido());
     }
 
     @DeleteMapping("/{tipo}")

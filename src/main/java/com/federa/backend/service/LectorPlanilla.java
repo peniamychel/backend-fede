@@ -47,12 +47,16 @@ public class LectorPlanilla {
      * fuente y no pueden desincronizarse.
      */
     public enum Columna {
+        ABREVIATURA("ABREVIATURA", false, "IVI", "ABREVIATURA", "ABREV", "SIGLA"),
         CENTRAL("CENTRAL", true, "IVIRGARZAMA", "CENTRAL"),
         SINDICATO("SINDICATO", true, "LIBERTAD", "SINDICATO"),
         NOMBRES("NOMBRES", true, "CONSTANTINA", "NOMBRES", "NOMBRE"),
         APELLIDOS("APELLIDOS", false, "HINOJOSA LA FUENTE", "APELLIDOS", "APELLIDO"),
         CI("C.I", false, "913516", "CI", "CEDULA", "CEDULADEIDENTIDAD", "CARNETIDENTIDAD"),
         LOTE("N° LOTE", false, "74", "NLOTE", "NROLOTE", "NUMLOTE", "NUMEROLOTE", "LOTE"),
+        EXTENSION("EXTENSION", false, "A", "EXTENSION", "EXT", "LETRA"),
+        CLASIFICACION("CLASIFICACION", false, "SISTEMA", "CLASIFICACION",
+                "ESTADOLOTE", "ESTADODELLOTE"),
         OBSERVACIONES("OBSERVACIONES", false, "falta foto, el nombre no coincide con el CI",
                 "OBSERVACIONES", "OBSERVACION", "OBS", "OBJ");
 
@@ -89,11 +93,14 @@ public class LectorPlanilla {
     public record Fila(
             int numero,
             String central,
+            String abreviatura,
             String sindicato,
             String nombres,
             String apellidos,
             String ci,
             String numeroLote,
+            String extension,
+            String clasificacion,
             String observaciones
     ) {
     }
@@ -172,23 +179,27 @@ public class LectorPlanilla {
             }
 
             String central = celda(fila, posiciones, Columna.CENTRAL, evaluador);
+            String abreviatura = celda(fila, posiciones, Columna.ABREVIATURA, evaluador);
             String sindicato = celda(fila, posiciones, Columna.SINDICATO, evaluador);
             String nombres = celda(fila, posiciones, Columna.NOMBRES, evaluador);
             String apellidos = celda(fila, posiciones, Columna.APELLIDOS, evaluador);
             String ci = celda(fila, posiciones, Columna.CI, evaluador);
             String lote = celda(fila, posiciones, Columna.LOTE, evaluador);
+            String extension = celda(fila, posiciones, Columna.EXTENSION, evaluador);
+            String clasificacion = celda(fila, posiciones, Columna.CLASIFICACION, evaluador);
             String observaciones = celda(fila, posiciones, Columna.OBSERVACIONES, evaluador);
 
             // Las filas totalmente vacías se saltean sin ruido: un .xlsx suele
             // arrastrar cientos al final y no son errores del usuario.
-            if (central == null && sindicato == null && nombres == null && apellidos == null
-                    && ci == null && lote == null && observaciones == null) {
+            if (central == null && abreviatura == null && sindicato == null && nombres == null
+                    && apellidos == null && ci == null && lote == null && extension == null
+                    && clasificacion == null && observaciones == null) {
                 continue;
             }
 
             // i es base cero y Excel numera desde 1.
-            filas.add(new Fila(i + 1, central, sindicato, nombres, apellidos, ci, lote,
-                    observaciones));
+            filas.add(new Fila(i + 1, central, abreviatura, sindicato, nombres, apellidos, ci,
+                    lote, extension, clasificacion, observaciones));
         }
         return filas;
     }

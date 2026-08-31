@@ -45,7 +45,7 @@ public class CentralService {
     @Transactional
     public CentralResponse crear(CentralRequest request) {
         Federacion federacion = federacionService.buscar(request.federacionId());
-        String nombre = Textos.normalizar(request.nombre());
+        String nombre = Textos.normalizarParaGuardar(request.nombre());
         String abreviatura = abreviaturaDe(request.abreviatura());
         verificarNombreLibre(federacion.getId(), nombre, null);
         verificarAbreviaturaLibre(abreviatura, null);
@@ -61,7 +61,7 @@ public class CentralService {
     public CentralResponse actualizar(Long id, CentralRequest request) {
         Central central = buscar(id);
         Federacion federacion = federacionService.buscar(request.federacionId());
-        String nombre = Textos.normalizar(request.nombre());
+        String nombre = Textos.normalizarParaGuardar(request.nombre());
         String abreviatura = abreviaturaDe(request.abreviatura());
         verificarNombreLibre(federacion.getId(), nombre, id);
         verificarAbreviaturaLibre(abreviatura, id);
