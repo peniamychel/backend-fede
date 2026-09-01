@@ -154,6 +154,14 @@ public class SindicatoController {
         return credencialService.confirmarAnversosImpresos(id, seleccion);
     }
 
+    @PatchMapping("/{id}/credenciales/impresion/ultimo-grupo")
+    @Operation(summary = "Corrige cuáles tarjetas salieron en la última tanda masiva")
+    public CredencialService.PanelImpresionSindicato revisarUltimoGrupo(
+            @PathVariable Long id,
+            @RequestBody CredencialService.RevisionGrupoImpresion revision) {
+        return credencialService.revisarUltimoGrupo(id, revision);
+    }
+
     @GetMapping(value = "/{id}/credenciales/impresion/reversos.pdf",
             produces = MediaType.APPLICATION_PDF_VALUE)
     @Operation(summary = "Genera una cantidad de reversos idénticos en páginas CR80")

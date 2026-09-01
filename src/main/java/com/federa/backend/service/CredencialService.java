@@ -10,6 +10,8 @@ import com.federa.backend.dto.VetoResponse;
 import com.federa.backend.exception.RecursoNoEncontradoException;
 import com.federa.backend.exception.ReglaNegocioException;
 import com.federa.backend.model.Cargo;
+import com.federa.backend.model.DetalleGrupoImpresionCredencial;
+import com.federa.backend.model.GrupoImpresionCredencial;
 import com.federa.backend.model.ImagenCargo;
 import com.federa.backend.model.Lote;
 import com.federa.backend.model.Productor;
@@ -21,6 +23,8 @@ import com.federa.backend.model.enums.TipoCargo;
 import com.federa.backend.model.enums.TipoImagen;
 import com.federa.backend.model.enums.TipoImagenCargo;
 import com.federa.backend.repository.CargoRepository;
+import com.federa.backend.repository.DetalleGrupoImpresionCredencialRepository;
+import com.federa.backend.repository.GrupoImpresionCredencialRepository;
 import com.federa.backend.repository.ImagenProductorRepository;
 import com.federa.backend.repository.LoteRepository;
 import com.federa.backend.repository.ProductorRepository;
@@ -85,6 +89,8 @@ public class CredencialService {
     private final RequisitosCredencial requisitos;
     private final VetoService vetoService;
     private final DisenoCredencialService disenoCredencialService;
+    private final GrupoImpresionCredencialRepository grupoImpresionRepository;
+    private final DetalleGrupoImpresionCredencialRepository detalleImpresionRepository;
 
     public CredencialService(ProductorRepository productorRepository,
                              SindicatoRepository sindicatoRepository,
@@ -97,7 +103,9 @@ public class CredencialService {
                              GeneradorQr generadorQr,
                              RequisitosCredencial requisitos,
                              VetoService vetoService,
-                             DisenoCredencialService disenoCredencialService) {
+                             DisenoCredencialService disenoCredencialService,
+                             GrupoImpresionCredencialRepository grupoImpresionRepository,
+                             DetalleGrupoImpresionCredencialRepository detalleImpresionRepository) {
         this.productorRepository = productorRepository;
         this.sindicatoRepository = sindicatoRepository;
         this.loteRepository = loteRepository;
@@ -110,6 +118,8 @@ public class CredencialService {
         this.requisitos = requisitos;
         this.vetoService = vetoService;
         this.disenoCredencialService = disenoCredencialService;
+        this.grupoImpresionRepository = grupoImpresionRepository;
+        this.detalleImpresionRepository = detalleImpresionRepository;
     }
 
     /** El PDF y el nombre con el que conviene bajarlo. */
@@ -283,14 +293,34 @@ public class CredencialService {
             int sinFoto,
             int listosParaImprimir,
             List<CredencialPrevia.Faltante> faltantesDelSindicato,
-            List<CandidatoImpresion> candidatos) {
+            List<CandidatoImpresion> candidatos,
+            UltimoGrupoImpresion ultimoGrupo) {
+
+        /** Compatibilidad con informes y pruebas que no necesitan la tanda. */
+        public PanelImpresionSindicato(Long sindicatoId, String sindicato,
+                                       int total, int impresos, int faltantesConFoto,
+                                       int sinFoto, int listosParaImprimir,
+                                       List<CredencialPrevia.Faltante> faltantesDelSindicato,
+                                       List<CandidatoImpresion> candidatos) {
+            this(sindicatoId, sindicato, total, impresos, faltantesConFoto, sinFoto,
+                    listosParaImprimir, faltantesDelSindicato, candidatos, null);
+        }
     }
 
-    /** Un anverso todavía no impreso que tiene fotografía. */
+    /** Anverso con fotografía disponible para selección o reimpresión. */
     public record CandidatoImpresion(CredencialPrevia credencial,
                                      int impresiones,
                                      LocalDateTime ultimaImpresion,
                                      boolean seleccionable) {
+    }
+
+    /** Última tanda masiva, con el subconjunto que hoy sigue contabilizado. */
+    public record UltimoGrupoImpresion(
+            Long id,
+            LocalDateTime enviadoEn,
+            int total,
+            List<Long> productorIdsContabilizados,
+            List<CandidatoImpresion> candidatos) {
     }
 
     /** Listas nominales usadas por el informe de entrega y datos faltantes. */
@@ -315,7 +345,20 @@ public class CredencialService {
     }
 
     /** Identificadores seleccionados en la vista previa de impresión. */
-    public record SeleccionImpresion(List<Long> productorIds) {
+    public record SeleccionImpresion(List<Long> productorIds,
+                                     Boolean permitirReimpresion) {
+
+        public SeleccionImpresion(List<Long> productorIds) {
+            this(productorIds, false);
+        }
+
+        boolean permiteReimpresion() {
+            return Boolean.TRUE.equals(permitirReimpresion);
+        }
+    }
+
+    /** Resultado real de la última tanda: la lista puede estar vacía. */
+    public record RevisionGrupoImpresion(Long grupoId, List<Long> productorIdsImpresos) {
     }
 
     /**
@@ -344,31 +387,80 @@ public class CredencialService {
         int listos = 0;
         List<CandidatoImpresion> candidatos = new ArrayList<>();
         for (Productor productor : productores) {
-            if (productor.getCredencialImpresiones() > 0) {
+            boolean yaImpreso = productor.getCredencialImpresiones() > 0;
+            if (yaImpreso) {
                 impresos++;
-                continue;
             }
             String fotoUrl = fotos.get(productor.getId());
             if (fotoUrl == null) {
-                sinFoto++;
+                if (!yaImpreso) sinFoto++;
                 continue;
             }
-            faltantesConFoto++;
+            if (!yaImpreso) faltantesConFoto++;
             List<CredencialPrevia.Faltante> faltantes = new ArrayList<>(faltantesJerarquia);
             faltantes.addAll(requisitos.delProductor(
                     productor, true, tieneNumeroLote(lotes, productor.getId())));
             CredencialPrevia.Bloqueo bloqueo = bloqueoDe(vetos.get(productor.getId()));
             boolean seleccionable = faltantes.isEmpty() && bloqueo == null;
-            if (seleccionable) listos++;
+            if (!yaImpreso && seleccionable) listos++;
             CredencialPrevia previa = armarPrevia(productor, sindicato, jerarquia,
                     unir(lotes.get(productor.getId())), fotoUrl, faltantes, bloqueo);
             candidatos.add(new CandidatoImpresion(previa,
                     productor.getCredencialImpresiones(),
                     productor.getCredencialUltimaImpresion(), seleccionable));
         }
+        UltimoGrupoImpresion ultimoGrupo = ultimoGrupoImpresion(
+                sindicatoId, sindicato, jerarquia, fotos, lotes, vetos, candidatos);
         return new PanelImpresionSindicato(sindicato.getId(), sindicato.getNombre(),
                 productores.size(), impresos, faltantesConFoto, sinFoto, listos,
-                List.copyOf(faltantesJerarquia), List.copyOf(candidatos));
+                List.copyOf(faltantesJerarquia), List.copyOf(candidatos), ultimoGrupo);
+    }
+
+    private UltimoGrupoImpresion ultimoGrupoImpresion(
+            Long sindicatoId,
+            Sindicato sindicato,
+            Jerarquia jerarquia,
+            Map<Long, String> fotos,
+            Map<Long, List<String>> lotes,
+            Map<Long, VetoResponse> vetos,
+            List<CandidatoImpresion> candidatosActuales) {
+        Optional<GrupoImpresionCredencial> encontrado = grupoImpresionRepository
+                .findFirstBySindicatoIdOrderByEnviadoEnDescIdDesc(sindicatoId);
+        if (encontrado.isEmpty()) return null;
+
+        GrupoImpresionCredencial grupo = encontrado.get();
+        List<DetalleGrupoImpresionCredencial> detalles = detalleImpresionRepository
+                .findByGrupoIdOrderByIdAsc(grupo.getId());
+        Map<Long, CandidatoImpresion> porProductor = new HashMap<>();
+        for (CandidatoImpresion candidato : candidatosActuales) {
+            porProductor.put(candidato.credencial().productorId(), candidato);
+        }
+
+        List<Long> contabilizados = new ArrayList<>();
+        List<CandidatoImpresion> candidatos = new ArrayList<>();
+        for (DetalleGrupoImpresionCredencial detalle : detalles) {
+            Productor productor = detalle.getProductor();
+            if (detalle.isContabilizado()) contabilizados.add(productor.getId());
+            CandidatoImpresion candidato = porProductor.get(productor.getId());
+            if (candidato == null) {
+                List<CredencialPrevia.Faltante> faltantes = new ArrayList<>(
+                        requisitos.deJerarquia(sindicato, jerarquia.ejecutivoFederacion(),
+                                jerarquia.secretarioCentral(),
+                                jerarquia.secretarioSindicato()));
+                faltantes.addAll(requisitos.delProductor(productor,
+                        fotos.containsKey(productor.getId()),
+                        tieneNumeroLote(lotes, productor.getId())));
+                CredencialPrevia previa = armarPrevia(productor, sindicato, jerarquia,
+                        unir(lotes.get(productor.getId())), fotos.get(productor.getId()),
+                        faltantes, bloqueoDe(vetos.get(productor.getId())));
+                candidato = new CandidatoImpresion(previa,
+                        productor.getCredencialImpresiones(),
+                        productor.getCredencialUltimaImpresion(), true);
+            }
+            candidatos.add(candidato);
+        }
+        return new UltimoGrupoImpresion(grupo.getId(), grupo.getEnviadoEn(),
+                detalles.size(), List.copyOf(contabilizados), List.copyOf(candidatos));
     }
 
     /**
@@ -425,7 +517,8 @@ public class CredencialService {
         Directorio directorio = directorioDe(sindicato);
         List<CredencialProductor> credenciales = new ArrayList<>();
         for (Productor productor : productores) {
-            if (productor.getCredencialImpresiones() > 0) {
+            if (productor.getCredencialImpresiones() > 0
+                    && !seleccion.permiteReimpresion()) {
                 throw new ReglaNegocioException(productor.getNombreCompleto()
                         + " ya figura como impreso; recargá la cola antes de continuar");
             }
@@ -451,12 +544,94 @@ public class CredencialService {
     @Transactional
     public PanelImpresionSindicato confirmarAnversosImpresos(
             Long sindicatoId, SeleccionImpresion seleccion) {
-        List<Productor> productores = seleccionarProductores(sindicatoId, seleccion);
+        List<Productor> productores = seleccionarProductoresParaActualizar(
+                sindicatoId, seleccion);
         LocalDateTime ahora = LocalDateTime.now();
+        Sindicato sindicato = sindicatoRepository.findById(sindicatoId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("sindicato", sindicatoId));
+        GrupoImpresionCredencial grupo = grupoImpresionRepository.saveAndFlush(
+                new GrupoImpresionCredencial(sindicato, ahora));
+        List<DetalleGrupoImpresionCredencial> detalles = new ArrayList<>();
         for (Productor productor : productores) {
+            detalles.add(new DetalleGrupoImpresionCredencial(grupo, productor,
+                    productor.getCredencialImpresiones(),
+                    productor.getCredencialUltimaImpresion()));
             productor.setCredencialImpresiones(productor.getCredencialImpresiones() + 1);
             productor.setCredencialUltimaImpresion(ahora);
         }
+        detalleImpresionRepository.saveAll(detalles);
+        detalleImpresionRepository.flush();
+        productorRepository.flush();
+        return panelImpresionSindicato(sindicatoId);
+    }
+
+    /**
+     * Reemplaza el resultado contabilizado de la última tanda por lo que la
+     * persona verificó físicamente. Es idempotente: volver a guardar la misma
+     * selección no suma ni resta impresiones otra vez.
+     */
+    @Transactional
+    public PanelImpresionSindicato revisarUltimoGrupo(
+            Long sindicatoId, RevisionGrupoImpresion revision) {
+        if (revision == null || revision.grupoId() == null
+                || revision.productorIdsImpresos() == null) {
+            throw new ReglaNegocioException(
+                    "Indicá el grupo y cuáles credenciales sí se imprimieron");
+        }
+        GrupoImpresionCredencial grupo = grupoImpresionRepository
+                .findFirstBySindicatoIdOrderByEnviadoEnDescIdDesc(sindicatoId)
+                .orElseThrow(() -> new ReglaNegocioException(
+                        "Todavía no hay una impresión masiva para revisar"));
+        if (!grupo.getId().equals(revision.grupoId())) {
+            throw new ReglaNegocioException(
+                    "La tanda cambió; recargá antes de revisar la última impresión");
+        }
+
+        List<DetalleGrupoImpresionCredencial> detalles = detalleImpresionRepository
+                .findByGrupoIdOrderByIdAsc(grupo.getId());
+        Set<Long> idsDelGrupo = detalles.stream()
+                .map(detalle -> detalle.getProductor().getId())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<Long> impresos = new LinkedHashSet<>(revision.productorIdsImpresos());
+        impresos.remove(null);
+        if (!idsDelGrupo.containsAll(impresos)) {
+            throw new ReglaNegocioException(
+                    "La revisión contiene productores que no pertenecen a la última tanda");
+        }
+
+        Map<Long, Productor> productores = productorRepository
+                .findAllByIdParaImpresion(new ArrayList<>(idsDelGrupo)).stream()
+                .collect(Collectors.toMap(Productor::getId, productor -> productor));
+        for (DetalleGrupoImpresionCredencial detalle : detalles) {
+            Long productorId = detalle.getProductor().getId();
+            Productor productor = productores.get(productorId);
+            if (productor == null) {
+                throw new ReglaNegocioException(
+                        "Uno de los productores de la tanda ya no existe");
+            }
+            boolean debeContar = impresos.contains(productorId);
+            if (debeContar == detalle.isContabilizado()) continue;
+
+            if (debeContar) {
+                productor.setCredencialImpresiones(
+                        productor.getCredencialImpresiones() + 1);
+                LocalDateTime ultima = productor.getCredencialUltimaImpresion();
+                if (ultima == null || ultima.isBefore(grupo.getEnviadoEn())) {
+                    productor.setCredencialUltimaImpresion(grupo.getEnviadoEn());
+                }
+            } else {
+                int nuevoConteo = Math.max(0,
+                        productor.getCredencialImpresiones() - 1);
+                productor.setCredencialImpresiones(nuevoConteo);
+                if (nuevoConteo <= detalle.getConteoAnterior()) {
+                    productor.setCredencialImpresiones(detalle.getConteoAnterior());
+                    productor.setCredencialUltimaImpresion(
+                            detalle.getUltimaImpresionAnterior());
+                }
+            }
+            detalle.setContabilizado(debeContar);
+        }
+        detalleImpresionRepository.saveAll(detalles);
         productorRepository.flush();
         return panelImpresionSindicato(sindicatoId);
     }
@@ -522,6 +697,25 @@ public class CredencialService {
             if (!sindicatoId.equals(productor.getSindicato().getId())) {
                 throw new ReglaNegocioException(productor.getNombreCompleto()
                         + " no pertenece a este sindicato");
+            }
+            resultado.add(productor);
+        }
+        return resultado;
+    }
+
+    private List<Productor> seleccionarProductoresParaActualizar(
+            Long sindicatoId, SeleccionImpresion seleccion) {
+        List<Productor> validados = seleccionarProductores(sindicatoId, seleccion);
+        List<Long> ids = validados.stream().map(Productor::getId).toList();
+        Map<Long, Productor> bloqueados = productorRepository
+                .findAllByIdParaImpresion(ids).stream()
+                .collect(Collectors.toMap(Productor::getId, productor -> productor));
+        List<Productor> resultado = new ArrayList<>(ids.size());
+        for (Long id : ids) {
+            Productor productor = bloqueados.get(id);
+            if (productor == null) {
+                throw new ReglaNegocioException(
+                        "Uno de los productores seleccionados ya no existe");
             }
             resultado.add(productor);
         }

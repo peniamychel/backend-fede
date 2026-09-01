@@ -18,6 +18,10 @@ public interface ProductorRepository extends JpaRepository<Productor, Long> {
     @Query("select p from Productor p where p.id = :id")
     Optional<Productor> findByIdParaRevisionSie(@Param("id") Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Productor p where p.id in :ids")
+    List<Productor> findAllByIdParaImpresion(@Param("ids") List<Long> ids);
+
     List<Productor> findBySindicatoId(Long sindicatoId);
 
     Page<Productor> findBySindicatoCentralId(Long centralId, Pageable pageable);

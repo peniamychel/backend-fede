@@ -1,0 +1,110 @@
+name: federa-produccion
+
+services:
+  federa-db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      TZ: America/La_Paz
+      MARIADB_DATABASE: ${DB_NOMBRE:-federa}
+      MARIADB_USER: ${DB_USUARIO:-federa}
+      MARIADB_PASSWORD: ${DB_CONTRASENA:?Defina DB_CONTRASENA en .env.docker}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_CONTRASENA:?Defina DB_ROOT_CONTRASENA en .env.docker}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - federa_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - federa_internal
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  federa-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: federa/backend:local
+    restart: unless-stopped
+    environment:
+      TZ: America/La_Paz
+      SPRING_PROFILES_ACTIVE: docker
+      DB_URL: "jdbc:mariadb://federa-db:3306/${DB_NOMBRE:-federa}?sslMode=disable&useUnicode=true&characterEncoding=UTF-8"
+      DB_USUARIO: ${DB_USUARIO:-federa}
+      DB_CONTRASENA: ${DB_CONTRASENA:?Defina DB_CONTRASENA en .env.docker}
+      FEDERA_ALMACENAMIENTO_RAIZ: /data/almacenamiento
+      BACKUP_RAIZ: /data/respaldos
+      MARIADB_DUMP: /usr/bin/mariadb-dump
+      BACKUP_DB_HOST: federa-db
+      BACKUP_DB_PUERTO: 3306
+      BACKUP_DB_NOMBRE: ${DB_NOMBRE:-federa}
+      BACKUP_DB_USUARIO: ${DB_USUARIO:-federa}
+      BACKUP_DB_CONTRASENA: ${DB_CONTRASENA:?Defina DB_CONTRASENA en .env.docker}
+      BACKUP_HABILITADO: ${BACKUP_HABILITADO:-true}
+      BACKUP_AUTOMATICO: ${BACKUP_AUTOMATICO:-true}
+      SIE_HABILITADO: ${SIE_HABILITADO:-true}
+      SIE_URL: ${SIE_URL:-https://api.itt.sie.gob.bo/persona/busqueda}
+      SIE_TOKEN: ${SIE_TOKEN:-}
+      JWT_CLAVE: ${JWT_CLAVE:?Defina JWT_CLAVE en .env.docker}
+      ADMIN_USUARIO: ${ADMIN_USUARIO:-admin}
+      ADMIN_CONTRASENA: ${ADMIN_CONTRASENA:?Defina ADMIN_CONTRASENA en .env.docker}
+      EXIGIR_AUTENTICACION: ${EXIGIR_AUTENTICACION:-false}
+      PIE_FIRMA_SINDICATO_HABILITADO: ${PIE_FIRMA_SINDICATO_HABILITADO:-false}
+      FIRMA_SINDICATO_OBLIGATORIA: ${FIRMA_SINDICATO_OBLIGATORIA:-false}
+    volumes:
+      - federa_storage:/data/almacenamiento
+      - federa_backups:/data/respaldos
+    depends_on:
+      federa-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/v3/api-docs"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    networks:
+      - federa_internal
+    logging: *logging
+
+  federa-web:
+    build:
+      context: ${FRONTEND_CONTEXT:-../../../AndroidStudioProjects/frontend-fede}
+      dockerfile: Dockerfile
+    image: federa/web:local
+    restart: unless-stopped
+    ports:
+      - "${WEB_PUERTO:-80}:80"
+    depends_on:
+      federa-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - federa_internal
+    logging: *logging
+
+volumes:
+  federa_db_data:
+    name: federa_produccion_db
+  federa_storage:
+    name: federa_produccion_almacenamiento
+  federa_backups:
+    name: federa_produccion_respaldos
+
+networks:
+  federa_internal:
+    name: federa_produccion_red
+    driver: bridge

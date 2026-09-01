@@ -35,6 +35,7 @@ build/
 ### Configuracion local y secretos ###
 # Se carga automaticamente al iniciar Spring desde la raiz del backend.
 .env
+.env.docker
 .env.local
 .env.*.local
 !.env.example

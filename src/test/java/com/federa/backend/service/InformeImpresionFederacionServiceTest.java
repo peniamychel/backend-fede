@@ -5,8 +5,13 @@ import com.federa.backend.dto.InformeImpresionFederacion;
 import com.federa.backend.model.Central;
 import com.federa.backend.model.Federacion;
 import com.federa.backend.repository.CentralRepository;
+import com.lowagie.text.pdf.PdfReader;
+import com.lowagie.text.pdf.parser.PdfTextExtractor;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,7 +37,8 @@ class InformeImpresionFederacionServiceTest {
         when(informes.obtener(11L)).thenReturn(informe(segunda, 3, 2, 8, 3, 4, 1, 3));
 
         InformeImpresionFederacion resultado = new InformeImpresionFederacionService(
-                federaciones, centrales, informes).obtener(1L);
+                federaciones, centrales, informes,
+                mock(InformeImpresionFederacionPdf.class)).obtener(1L);
 
         assertThat(resultado.centrales()).isEqualTo(2);
         assertThat(resultado.sindicatos()).isEqualTo(5);
@@ -46,6 +52,41 @@ class InformeImpresionFederacionServiceTest {
         assertThat(resultado.porcentajeAvance()).isEqualTo(60.0);
         assertThat(resultado.detalle()).extracting(InformeImpresionCentral::central)
                 .containsExactly("13 DE JUNIO", "CHIMORÉ");
+    }
+
+    @Test
+    void elPdfIncluyeResumenGlobalYCadaSindicato() throws IOException {
+        InformeImpresionCentral central = new InformeImpresionCentral(
+                10L, "13 DE JUNIO", "CARRASCO TROPICAL",
+                1, 1, 12, 9, 3, 2, 1, 2, 75,
+                List.of(new InformeImpresionCentral.FilaSindicato(
+                        100L, "1RO DE MAYO", false,
+                        12, 9, 3, 2, 1, 2, 75)));
+        InformeImpresionFederacion informe = new InformeImpresionFederacion(
+                1L, "CARRASCO TROPICAL", 1, 1, 1,
+                12, 9, 3, 2, 1, 2, 75, List.of(central));
+
+        byte[] pdf = new InformeImpresionFederacionPdf().generar(informe);
+        Files.createDirectories(Path.of("target"));
+        Files.write(Path.of("target", "avance-general-impresion-muestra.pdf"), pdf);
+        PdfReader lector = new PdfReader(pdf);
+        try {
+            StringBuilder texto = new StringBuilder();
+            PdfTextExtractor extractor = new PdfTextExtractor(lector);
+            for (int pagina = 1; pagina <= lector.getNumberOfPages(); pagina++) {
+                texto.append(extractor.getTextFromPage(pagina)).append(' ');
+            }
+            String normalizado = texto.toString().replaceAll("\\s+", " ");
+            assertThat(normalizado).contains(
+                    "AVANCE GENERAL DE IMPRESIÓN DE CREDENCIALES",
+                    "CARRASCO TROPICAL", "RESUMEN POR CENTRAL",
+                    "13 DE JUNIO", "DETALLE POR CENTRAL Y SINDICATO",
+                    "1RO DE MAYO", "SIND. SIN SELLO", "FALTA", "75.0%");
+            assertThat(lector.getPageSizeWithRotation(1).getWidth())
+                    .isGreaterThan(lector.getPageSizeWithRotation(1).getHeight());
+        } finally {
+            lector.close();
+        }
     }
 
     private static InformeImpresionCentral informe(Central central, int sindicatos,

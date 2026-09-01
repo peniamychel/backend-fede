@@ -33,6 +33,57 @@ excluido de Git.
 Queda en `http://localhost:8080`. La documentación de la API, con todos los
 endpoints y sus reglas, en `http://localhost:8080/swagger-ui.html`.
 
+## Desarrollo local y entorno Docker
+
+El proyecto mantiene dos ambientes independientes:
+
+- **Desarrollo**: este backend desde IntelliJ o `./mvnw spring-boot:run`, la
+  MariaDB local del puerto 3307 y Flutter ejecutado desde su repositorio.
+- **Docker**: MariaDB, backend y Flutter Web aislados en contenedores, con su
+  propia base y sus propios archivos. Sirve como entorno de integración antes
+  de considerar un cambio listo para producción.
+
+La primera vez, preparar las variables del entorno Docker:
+
+```powershell
+Copy-Item .env.docker.example .env.docker
+```
+
+Editar las contraseñas y, cuando corresponda, el token SIE. Luego:
+
+```powershell
+docker compose --env-file .env.docker up -d --build
+docker compose --env-file .env.docker ps
+```
+
+La aplicación queda en `http://localhost/` y Swagger en
+`http://localhost/swagger-ui.html`. Desde otro equipo de la intranet se usa la
+IP de esta computadora, sin agregar el puerto 8080.
+
+Para reconstruir después de cambiar código:
+
+```powershell
+# Todo el entorno
+docker compose --env-file .env.docker up -d --build
+
+# Solo el backend
+docker compose --env-file .env.docker up -d --build federa-backend
+
+# Solo Flutter Web
+docker compose --env-file .env.docker up -d --build federa-web
+```
+
+Detener los contenedores conserva la base, imágenes y respaldos:
+
+```powershell
+docker compose --env-file .env.docker down
+```
+
+No agregar `-v`: `docker compose down -v` elimina deliberadamente los tres
+volúmenes del entorno Docker. Desarrollo y Docker pueden estar levantados a la
+vez porque Docker solo publica el puerto 80; su backend y su MariaDB no exponen
+8080 ni 3306/3307 en Windows.
+
 ## Configuración
 
 Las credenciales se leen del `.env` local o de variables del sistema. Las
