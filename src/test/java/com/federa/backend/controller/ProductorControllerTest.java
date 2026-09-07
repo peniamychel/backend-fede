@@ -1,6 +1,7 @@
 package com.federa.backend.controller;
 
 import com.federa.backend.dto.ProductorResponse;
+import com.federa.backend.dto.ObservacionProductorRequest;
 import com.federa.backend.service.CredencialService;
 import com.federa.backend.service.DirectorioService;
 import com.federa.backend.service.ProductorService;
@@ -41,5 +42,24 @@ class ProductorControllerTest {
 
         assertThat(controller.confirmarImpresionCredencial(812L)).isSameAs(esperado);
         verify(credenciales).confirmarAnversoImpreso(812L);
+    }
+
+    @Test
+    void permiteMarcarYQuitarLaObservacionManual() {
+        ProductorService productores = mock(ProductorService.class);
+        ProductorResponse esperado = mock(ProductorResponse.class);
+        when(productores.observar(812L, "REVISAR FOTO")).thenReturn(esperado);
+        when(productores.quitarObservacion(812L)).thenReturn(esperado);
+        ProductorController controller = new ProductorController(
+                productores,
+                mock(DirectorioService.class),
+                mock(CredencialService.class),
+                mock(RevisionSieProductorService.class));
+
+        assertThat(controller.observar(812L,
+                new ObservacionProductorRequest("REVISAR FOTO"))).isSameAs(esperado);
+        assertThat(controller.quitarObservacion(812L)).isSameAs(esperado);
+        verify(productores).observar(812L, "REVISAR FOTO");
+        verify(productores).quitarObservacion(812L);
     }
 }

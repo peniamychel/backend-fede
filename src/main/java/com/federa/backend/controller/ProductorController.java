@@ -2,8 +2,10 @@ package com.federa.backend.controller;
 
 import com.federa.backend.config.ApiRutas;
 import com.federa.backend.dto.CargoResponse;
+import com.federa.backend.dto.ConfirmacionSieRequest;
 import com.federa.backend.dto.CredencialPrevia;
 import com.federa.backend.dto.EstadoRequest;
+import com.federa.backend.dto.ObservacionProductorRequest;
 import com.federa.backend.dto.ProductorDetalleResponse;
 import com.federa.backend.dto.ProductorRequest;
 import com.federa.backend.dto.ProductorResponse;
@@ -106,9 +108,16 @@ public class ProductorController {
     @PostMapping("/{id}/verificacion-sie")
     @Operation(summary = "Verifica manualmente los datos actuales del productor en SIE",
             description = "Acción temporal para revisar registros existentes. Consulta SIE "
-                    + "cada vez que el usuario la confirma y corrige nombres y apellidos si difieren.")
+                    + "cada vez que el usuario la confirma y propone nombres y apellidos si difieren.")
     public RevisionSieProductorResponse verificarManualmenteConSie(@PathVariable Long id) {
         return revisionSieService.verificarManualmente(id);
+    }
+
+    @PostMapping("/{id}/revision-sie/confirmacion")
+    @Operation(summary = "Acepta o rechaza expresamente la corrección propuesta por SIE")
+    public RevisionSieProductorResponse confirmarRevisionSie(@PathVariable Long id,
+            @Valid @RequestBody ConfirmacionSieRequest decision) {
+        return revisionSieService.confirmar(id, decision);
     }
 
     @GetMapping(value = "/{id}/credencial.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
@@ -202,6 +211,21 @@ public class ProductorController {
     public ProductorResponse cambiarEstado(@PathVariable Long id,
                                         @Valid @RequestBody EstadoRequest request) {
         return productorService.cambiarEstado(id, request.estado());
+    }
+
+    @PatchMapping("/{id}/observacion")
+    @Operation(summary = "Marca manualmente al productor como observado",
+            description = "El motivo es obligatorio. Mientras siga observado, queda fuera "
+                    + "de toda impresion de credenciales.")
+    public ProductorResponse observar(@PathVariable Long id,
+            @Valid @RequestBody ObservacionProductorRequest request) {
+        return productorService.observar(id, request.texto());
+    }
+
+    @DeleteMapping("/{id}/observacion")
+    @Operation(summary = "Quita la observacion manual del productor")
+    public ProductorResponse quitarObservacion(@PathVariable Long id) {
+        return productorService.quitarObservacion(id);
     }
 
     @DeleteMapping("/{id}")

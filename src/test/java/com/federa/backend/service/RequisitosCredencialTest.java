@@ -6,6 +6,7 @@ import com.federa.backend.model.Central;
 import com.federa.backend.model.Federacion;
 import com.federa.backend.model.Productor;
 import com.federa.backend.model.Sindicato;
+import com.federa.backend.model.enums.EstadoRevisionSieProductor;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -88,6 +89,60 @@ class RequisitosCredencialTest {
 
         assertThat(sinLote).extracting(Faltante::campo).contains("Número de lote");
         assertThat(conLote).extracting(Faltante::campo).doesNotContain("Número de lote");
+    }
+
+    @Test
+    void unaObservacionManualExcluyeAlProductorDeLaImpresion() {
+        Productor productor = mock(Productor.class);
+        when(productor.isEstado()).thenReturn(true);
+        when(productor.getNombres()).thenReturn("MARÍA");
+        when(productor.getApellidos()).thenReturn("PÉREZ");
+        when(productor.getCi()).thenReturn("1234567");
+        when(productor.getCorrelativo()).thenReturn(10);
+        when(productor.isObservado()).thenReturn(true);
+        when(productor.getObservacionManual()).thenReturn("REVISAR CÉDULA");
+        RequisitosCredencial requisitos = new RequisitosCredencial(
+                new ReglasDirectorio(false, false));
+
+        List<Faltante> faltantes = requisitos.delProductor(productor, true, true);
+
+        assertThat(faltantes).filteredOn(f -> f.campo().equals("Observación manual"))
+                .singleElement()
+                .satisfies(f -> assertThat(f.detalle()).isEqualTo("REVISAR CÉDULA"));
+    }
+
+    @Test
+    void unProductorDeshabilitadoQuedaFueraDeLaImpresion() {
+        Productor productor = mock(Productor.class);
+        when(productor.getNombres()).thenReturn("MARÍA");
+        when(productor.getApellidos()).thenReturn("PÉREZ");
+        when(productor.getCi()).thenReturn("1234567");
+        when(productor.getCorrelativo()).thenReturn(10);
+        when(productor.isEstado()).thenReturn(false);
+        RequisitosCredencial requisitos = new RequisitosCredencial(
+                new ReglasDirectorio(false, false));
+
+        assertThat(requisitos.delProductor(productor, true, true))
+                .extracting(Faltante::campo)
+                .contains("Productor deshabilitado");
+    }
+
+    @Test
+    void unEstadoSieNaranjaQuedaFueraDeLaImpresion() {
+        Productor productor = mock(Productor.class);
+        when(productor.isEstado()).thenReturn(true);
+        when(productor.getNombres()).thenReturn("MARÍA");
+        when(productor.getApellidos()).thenReturn("PÉREZ");
+        when(productor.getCi()).thenReturn("1234567");
+        when(productor.getCorrelativo()).thenReturn(10);
+        when(productor.isRevisionSieBloqueaImpresion()).thenReturn(true);
+        when(productor.getRevisionSieMensaje()).thenReturn("No encontrado en SIE");
+        RequisitosCredencial requisitos = new RequisitosCredencial(
+                new ReglasDirectorio(false, false));
+
+        assertThat(requisitos.delProductor(productor, true, true))
+                .extracting(Faltante::campo)
+                .contains("Revisión SIE pendiente");
     }
 
     private Cargo cargoSinFirma(String nombre) {

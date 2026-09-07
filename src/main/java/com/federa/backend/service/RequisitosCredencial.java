@@ -65,6 +65,21 @@ public class RequisitosCredencial {
     public List<Faltante> delProductor(Productor productor, boolean tieneFoto,
                                        boolean tieneNumeroLote) {
         List<Faltante> faltantes = new ArrayList<>();
+        if (!productor.isEstado()) {
+            faltantes.add(new Faltante("Productor deshabilitado",
+                    "El productor está dado de baja y no puede recibir una credencial",
+                    EN_LA_FICHA + " → Habilitar"));
+        }
+        if (productor.isObservado()) {
+            faltantes.add(new Faltante("Observación manual",
+                    productor.getObservacionManual(),
+                    EN_LA_FICHA + " → Editar observación"));
+        }
+        if (productor.isRevisionSieBloqueaImpresion()) {
+            faltantes.add(new Faltante("Revisión SIE pendiente",
+                    productor.getRevisionSieMensaje(),
+                    EN_LA_FICHA + " → Revisión SIE"));
+        }
         if (vacio(apellidosDe(productor))) {
             faltantes.add(new Faltante("Apellidos",
                     productor.getNombres() + " no tiene apellidos cargados",

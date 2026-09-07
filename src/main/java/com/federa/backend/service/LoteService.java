@@ -256,6 +256,12 @@ public class LoteService {
             Productor productor = productorService.buscar(request.productorId());
             verificarMismoSindicato(productor, lote);
             verificarSinParcela(productor);
+            if (Textos.limpiar(request.estado()) == null
+                    && productor.getClasificacionPendiente() != null) {
+                lote.setEstadoLote(productor.getClasificacionPendiente());
+                lote.setEstadoOriginal(productor.getClasificacionPendiente().name());
+            }
+            productor.setClasificacionPendiente(null);
             tenenciaRepository.save(productor.tomarLote(lote, LocalDate.now()));
             tenenciaRepository.flush();
             recalcularCodigosDelGrupo(lote);
@@ -355,6 +361,8 @@ public class LoteService {
             verificarSinParcela(productor);
 
             TenenciaLote nueva = productor.tomarLote(lote, desde);
+            // Al recibir una parcela existente manda su clasificación, no la propuesta antigua.
+            productor.setClasificacionPendiente(null);
             nueva.setMotivo(peticion.motivo());
             nueva.setObservaciones(Textos.limpiar(peticion.observaciones()));
             tenenciaRepository.save(nueva);

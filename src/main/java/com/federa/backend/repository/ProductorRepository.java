@@ -44,6 +44,10 @@ public interface ProductorRepository extends JpaRepository<Productor, Long> {
 
     List<Productor> findByCi(String ci);
 
+    /** Incluye todo el padrón, también productores deshabilitados y otras centrales. */
+    @Query("select p.ci, p.id from Productor p where p.ci is not null")
+    List<Object[]> findCedulasParaImportacion();
+
     long countBySindicatoId(Long sindicatoId);
 
     /**

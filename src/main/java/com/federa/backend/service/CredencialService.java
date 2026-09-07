@@ -139,7 +139,10 @@ public class CredencialService {
 
         // Primero el veto: si la asamblea lo observó, no importa que los datos
         // estén completos. Es una decisión, no un dato que falte.
+        exigirHabilitado(productor);
         exigirSinVeto(productor);
+        exigirSinObservacionManual(productor);
+        exigirRevisionSieResuelta(productor);
 
         List<String> codigosLote = loteRepository.findVigentesDeProductor(productorId).stream()
                 .map(lote -> CodigoLote.de(lote, productor.getLetraCodigo()))
@@ -517,12 +520,15 @@ public class CredencialService {
         Directorio directorio = directorioDe(sindicato);
         List<CredencialProductor> credenciales = new ArrayList<>();
         for (Productor productor : productores) {
+            exigirHabilitado(productor);
             if (productor.getCredencialImpresiones() > 0
                     && !seleccion.permiteReimpresion()) {
                 throw new ReglaNegocioException(productor.getNombreCompleto()
                         + " ya figura como impreso; recargá la cola antes de continuar");
             }
             exigirSinVeto(productor);
+            exigirSinObservacionManual(productor);
+            exigirRevisionSieResuelta(productor);
             byte[] foto = fotos.get(productor.getId());
             exigirCompleta(requisitos.delProductor(
                             productor, foto != null, tieneNumeroLote(lotes, productor.getId())),
@@ -546,6 +552,14 @@ public class CredencialService {
             Long sindicatoId, SeleccionImpresion seleccion) {
         List<Productor> productores = seleccionarProductoresParaActualizar(
                 sindicatoId, seleccion);
+        // Se vuelve a comprobar justo antes de contabilizar. La ficha pudo
+        // quedar observada después de preparar la vista previa de la tanda.
+        for (Productor productor : productores) {
+            exigirHabilitado(productor);
+            exigirSinVeto(productor);
+            exigirSinObservacionManual(productor);
+            exigirRevisionSieResuelta(productor);
+        }
         LocalDateTime ahora = LocalDateTime.now();
         Sindicato sindicato = sindicatoRepository.findById(sindicatoId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("sindicato", sindicatoId));
@@ -642,6 +656,10 @@ public class CredencialService {
         Productor productor = productorRepository.findById(productorId)
                 .orElseThrow(() -> new RecursoNoEncontradoException(
                         "productor", productorId));
+        exigirHabilitado(productor);
+        exigirSinVeto(productor);
+        exigirSinObservacionManual(productor);
+        exigirRevisionSieResuelta(productor);
         productor.setCredencialImpresiones(productor.getCredencialImpresiones() + 1);
         productor.setCredencialUltimaImpresion(LocalDateTime.now());
         productorRepository.flush();
@@ -807,6 +825,36 @@ public class CredencialService {
                 + "emite. Motivo: %s. Para destrabarlo, otra reunión tiene que decidir sacarlo "
                 + "de la lista de vetados.",
                 productor.getNombreCompleto(), veto.getDesde(), veto.getMotivo()));
+    }
+
+    /** Una baja administrativa siempre deja la credencial fuera de emisión. */
+    private void exigirHabilitado(Productor productor) {
+        if (productor.isEstado()) {
+            return;
+        }
+        throw new ReglaNegocioException(productor.getNombreCompleto()
+                + " está deshabilitado y su credencial no se imprime. "
+                + "Habilitalo nuevamente desde su ficha si volvió al padrón.");
+    }
+
+    /** Corta cualquier impresion mientras la revision manual siga pendiente. */
+    private void exigirSinObservacionManual(Productor productor) {
+        if (!productor.isObservado()) {
+            return;
+        }
+        throw new ReglaNegocioException(productor.getNombreCompleto()
+                + " esta observado durante la revision manual y su credencial no se imprime. "
+                + "Motivo: " + productor.getObservacionManual()
+                + ". Quitá la observacion desde su ficha cuando haya sido resuelta.");
+    }
+
+    private void exigirRevisionSieResuelta(Productor productor) {
+        if (!productor.isRevisionSieBloqueaImpresion()) {
+            return;
+        }
+        throw new ReglaNegocioException(productor.getNombreCompleto()
+                + " tiene una revisión SIE pendiente y su credencial no se imprime. "
+                + productor.getRevisionSieMensaje());
     }
 
     /** El bloqueo tal como lo muestra la vista previa, o null si no lo hay. */

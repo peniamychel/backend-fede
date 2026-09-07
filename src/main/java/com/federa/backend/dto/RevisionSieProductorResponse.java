@@ -7,10 +7,22 @@ public record RevisionSieProductorResponse(
         Estado estado,
         boolean completada,
         boolean datosModificados,
-        String mensaje
+        String mensaje,
+        Datos actuales,
+        Datos propuestos
 ) {
+    public RevisionSieProductorResponse(Estado estado, boolean completada,
+                                       boolean datosModificados, String mensaje) {
+        this(estado, completada, datosModificados, mensaje, null, null);
+    }
+
+    public record Datos(String ci, String nombres, String apellidos) {}
+
     public enum Estado {
+        REQUIERE_CONFIRMACION,
+        CONSERVADA,
         CORREGIDA,
+        CORREGIDA_MANUAL,
         VERIFICADA,
         ACEPTADA_SIN_COINCIDENCIA,
         ACEPTADA_SIN_CEDULA,

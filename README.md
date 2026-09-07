@@ -163,6 +163,67 @@ mysql -u root -p -P 3307 -h 127.0.0.1 federa < src/main/resources/db/auditoria-y
 
 En una base vacía no hacen falta: Hibernate crea el esquema completo solo.
 
+`productor-observacion-manual.sql` agrega el motivo de la observación hecha
+desde la ficha. En las instalaciones con `ddl-auto=update` la columna se crea
+al reiniciar el backend; el script queda como alternativa para esquemas
+administrados manualmente.
+
+`productor-estado-revision-sie.sql` conserva el resultado de SIE y la
+sugerencia pendiente. Los estados de advertencia bloquean la impresión hasta
+aceptar la sugerencia o corregir los datos de identidad manualmente.
+
+## Importación de padrón: cédulas repetidas
+
+La importación rechaza una cédula si ya figura en cualquier productor del
+padrón, incluso deshabilitado o perteneciente a otra central. Si una cédula
+aparece varias veces dentro del Excel, se rechazan todas esas filas y el informe
+indica sus números para corregirlas. La comparación ignora espacios y
+mayúsculas, pero conserva ceros iniciales y complementos de la cédula.
+
+La simulación y la importación definitiva realizan la misma comprobación.
+Con «ignorar filas con error» solo se guardan las filas válidas; sin esa opción,
+cualquier rechazo aborta la carga completa. Las cédulas vacías siguen admitidas
+como datos pendientes. No se eliminan ni fusionan duplicados históricos.
+
+## Revisión SIE con aprobación
+
+Al abrir un productor importado o verificarlo manualmente, SIE solo propone
+correcciones. Si hay diferencias, la respuesta `REQUIERE_CONFIRMACION` incluye
+los datos actuales y los propuestos para mostrarlos al usuario. La decisión se
+envía a `POST /api/v1/productores/{id}/revision-sie/confirmacion`.
+
+Aceptar valida nuevamente el resultado de SIE antes de guardar; rechazar conserva
+los nombres y completa la revisión. Cerrar el diálogo sin elegir no confirma nada.
+Si la ficha cambió mientras se revisaba, se exige una nueva consulta.
+
+Esta funcionalidad requiere actualizar backend y cliente Flutter juntos. No
+requiere migrar el esquema ni restaurar datos de producción.
+
+## Revisión de productores sin número de lote
+
+La importación admite las seis clasificaciones aunque no venga el número de
+lote. Conserva el dato en `productores.clasificacion_pendiente`, sin crear una
+parcela ficticia. Una clasificación vacía sigue vacía: no se deduce SISTEMA ni
+SIN SISTEMA para los registros antiguos.
+
+La API devuelve `clasificacion` y `revisionLotePendiente` en ficha y listados.
+La revisión se calcula por la ausencia de una tenencia vigente con lote numerado:
+aplica a todos, nuevos o antiguos, con cualquier clasificación o sin ella.
+Completar/asignar el número cierra la revisión; quitar la parcela la reabre.
+No es la revisión SIE y no se cierra aceptando una corrección de nombre.
+
+Al crear la parcela se usa la clasificación pendiente si no se especifica otra;
+Flutter la preselecciona para confirmarla o corregirla. Después manda la del lote.
+Se mantienen la prioridad de SISTEMA para A-H, los códigos personales y los demás
+requisitos de impresión. Los informes siguen incluyendo «Número de lote» como
+dato faltante y el indicador `credencialLista` ahora también lo comprueba.
+
+La columna es nullable y aditiva; `ddl-auto=update` la agrega al iniciar la nueva
+versión. Alternativa para entornos con migraciones manuales:
+`src/main/resources/db/productor-clasificacion-pendiente.sql` (repetible).
+No reconstruye clasificaciones que importaciones antiguas hayan descartado.
+Se deben actualizar backend y frontend juntos; no requiere restaurar datos.
+
 ## Las fotos
 
 No van a la base ni al repositorio: se guardan en disco bajo

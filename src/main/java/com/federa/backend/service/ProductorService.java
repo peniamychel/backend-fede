@@ -9,7 +9,9 @@ import com.federa.backend.exception.RecursoNoEncontradoException;
 import com.federa.backend.exception.ReglaNegocioException;
 import com.federa.backend.model.Productor;
 import com.federa.backend.model.Sindicato;
+import com.federa.backend.model.TenenciaLote;
 import com.federa.backend.model.enums.TipoImagen;
+import com.federa.backend.model.enums.EstadoRevisionSieProductor;
 import com.federa.backend.repository.ImagenCargoRepository;
 import com.federa.backend.repository.ImagenProductorRepository;
 import com.federa.backend.repository.ProductorRepository;
@@ -92,7 +94,12 @@ public class ProductorService {
     @Transactional
     public ProductorResponse actualizar(Long id, ProductorRequest request) {
         Productor productor = buscar(id);
+        boolean cambioDeIdentidad = cambioDeIdentidad(productor, request);
+        String identidadAnterior = identidadDe(productor);
         aplicar(productor, request);
+        if (cambioDeIdentidad && productor.getRevisionSieEstado() != null) {
+            marcarCorregidoManualmente(productor, identidadAnterior);
+        }
         // Se fuerza el UPDATE antes de mapear: el oyente de auditoría escribe
         // updatedAt recién al grabar, y sin esto la respuesta saldría con la
         // fecha vieja aunque la base quede bien.
@@ -146,6 +153,9 @@ public class ProductorService {
     @Transactional
     public ProductorResponse confirmarCorreccionNombre(Long id) {
         Productor productor = buscar(id);
+        boolean corrigio = productor.getNombresCorregidos() != null
+                || productor.getApellidosCorregidos() != null;
+        String identidadAnterior = identidadDe(productor);
         if (productor.getNombresCorregidos() != null) {
             productor.setNombres(productor.getNombresCorregidos());
             productor.setNombresCorregidos(null);
@@ -153,6 +163,9 @@ public class ProductorService {
         if (productor.getApellidosCorregidos() != null) {
             productor.setApellidos(productor.getApellidosCorregidos());
             productor.setApellidosCorregidos(null);
+        }
+        if (corrigio && productor.getRevisionSieEstado() != null) {
+            marcarCorregidoManualmente(productor, identidadAnterior);
         }
         // Se fuerza el UPDATE antes de mapear: el oyente de auditoría escribe
         // updatedAt recién al grabar, y sin esto la respuesta saldría con la
@@ -175,6 +188,45 @@ public class ProductorService {
         productor.setMarcado(Boolean.TRUE.equals(request.marcado()));
         productor.setSindicato(sindicato);
         numerar(productor, anterior, sindicato);
+    }
+
+    private boolean cambioDeIdentidad(Productor productor, ProductorRequest request) {
+        String nombresActuales = productor.getNombresCorregidos() != null
+                ? productor.getNombresCorregidos() : productor.getNombres();
+        String apellidosActuales = productor.getApellidosCorregidos() != null
+                ? productor.getApellidosCorregidos() : productor.getApellidos();
+        String nombresNuevos = request.nombresCorregidos() != null
+                ? request.nombresCorregidos() : request.nombres();
+        String apellidosNuevos = request.apellidosCorregidos() != null
+                ? request.apellidosCorregidos() : request.apellidos();
+        return !java.util.Objects.equals(
+                        Textos.normalizarParaGuardar(nombresActuales),
+                        Textos.normalizarParaGuardar(nombresNuevos))
+                || !java.util.Objects.equals(
+                        Textos.normalizarParaGuardar(apellidosActuales),
+                        Textos.normalizarParaGuardar(apellidosNuevos))
+                || !java.util.Objects.equals(
+                        Textos.limpiar(productor.getCi()), Textos.limpiar(request.ci()));
+    }
+
+    private void marcarCorregidoManualmente(Productor productor, String identidadAnterior) {
+        productor.setRevisionSiePendiente(false);
+        productor.setRevisionSieEstado(EstadoRevisionSieProductor.CORREGIDO_MANUAL);
+        productor.setRevisionSieMensaje(
+                "Corrección manual posterior a SIE: «" + identidadAnterior
+                        + "» cambió a «" + identidadDe(productor) + "».");
+        productor.setSieNombresSugeridos(null);
+        productor.setSieApellidosSugeridos(null);
+    }
+
+    private String identidadDe(Productor productor) {
+        String nombres = productor.getNombresCorregidos() != null
+                ? productor.getNombresCorregidos() : productor.getNombres();
+        String apellidos = productor.getApellidosCorregidos() != null
+                ? productor.getApellidosCorregidos() : productor.getApellidos();
+        String nombre = (nombres + " " + (apellidos == null ? "" : apellidos)).trim();
+        String ci = Textos.limpiar(productor.getCi());
+        return ci == null ? nombre : nombre + " · CI " + ci;
     }
 
     /**
@@ -217,6 +269,29 @@ public class ProductorService {
         return ProductorResponse.desde(entidad);
     }
 
+    /** Marca al productor como observado durante una revision manual. */
+    @Transactional
+    public ProductorResponse observar(Long id, String texto) {
+        String motivo = Textos.limpiar(texto);
+        if (motivo == null) {
+            throw new ReglaNegocioException(
+                    "Escribí el motivo antes de marcar al productor como observado");
+        }
+        Productor entidad = buscar(id);
+        entidad.setObservacionManual(motivo);
+        productorRepository.flush();
+        return ProductorResponse.desde(entidad);
+    }
+
+    /** Quita la observacion administrativa y vuelve a evaluar la impresion. */
+    @Transactional
+    public ProductorResponse quitarObservacion(Long id) {
+        Productor entidad = buscar(id);
+        entidad.setObservacionManual(null);
+        productorRepository.flush();
+        return ProductorResponse.desde(entidad);
+    }
+
     Productor buscar(Long id) {
         return productorRepository.findById(id)
                 .orElseThrow(() -> new RecursoNoEncontradoException("productor", id));
@@ -226,16 +301,30 @@ public class ProductorService {
 
     private Page<ProductorResponse> conImagenes(Page<Productor> pagina) {
         Map<Long, Map<TipoImagen, String>> porProductor = urlesDe(pagina.getContent());
+        Map<Long, List<TenenciaLote>> tenencias = tenenciasDe(pagina.getContent());
         return pagina.map(p -> ProductorResponse.desde(
-                p, porProductor.getOrDefault(p.getId(), Map.of())));
+                p, porProductor.getOrDefault(p.getId(), Map.of()),
+                tenencias.getOrDefault(p.getId(), List.of())));
     }
 
     private List<ProductorResponse> conImagenes(List<Productor> productores) {
         Map<Long, Map<TipoImagen, String>> porProductor = urlesDe(productores);
+        Map<Long, List<TenenciaLote>> tenencias = tenenciasDe(productores);
         return productores.stream()
                 .map(p -> ProductorResponse.desde(
-                        p, porProductor.getOrDefault(p.getId(), Map.of())))
+                        p, porProductor.getOrDefault(p.getId(), Map.of()),
+                        tenencias.getOrDefault(p.getId(), List.of())))
                 .toList();
+    }
+
+    private Map<Long, List<TenenciaLote>> tenenciasDe(List<Productor> productores) {
+        if (productores.isEmpty()) return Map.of();
+        Map<Long, List<TenenciaLote>> resultado = new HashMap<>();
+        for (TenenciaLote t : tenenciaRepository.findVigentesDeProductores(
+                productores.stream().map(Productor::getId).toList())) {
+            resultado.computeIfAbsent(t.getProductor().getId(), id -> new ArrayList<>()).add(t);
+        }
+        return resultado;
     }
 
     /**

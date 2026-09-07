@@ -36,6 +36,13 @@ public interface TenenciaLoteRepository extends JpaRepository<TenenciaLote, Long
 
     long countByProductorIdAndVigenteIsTrue(Long productorId);
 
+    @Query("""
+            select t from TenenciaLote t join fetch t.lote
+            where t.productor.id in :ids and t.vigente = true
+            order by t.id
+            """)
+    List<TenenciaLote> findVigentesDeProductores(@Param("ids") List<Long> ids);
+
     /** Todas las participaciones vigentes que tienen un número agrupable. */
     @Query("""
             select t from TenenciaLote t

@@ -5,6 +5,7 @@ import com.federa.backend.model.DetalleGrupoImpresionCredencial;
 import com.federa.backend.model.GrupoImpresionCredencial;
 import com.federa.backend.model.Productor;
 import com.federa.backend.model.Sindicato;
+import com.federa.backend.model.enums.EstadoRevisionSieProductor;
 import com.federa.backend.repository.CargoRepository;
 import com.federa.backend.repository.DetalleGrupoImpresionCredencialRepository;
 import com.federa.backend.repository.GrupoImpresionCredencialRepository;
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doReturn;
@@ -68,11 +70,11 @@ class CredencialServiceImpresionTest {
                 .credencialUltimaImpresion(impresionAnterior).build();
         panel = new CredencialService.PanelImpresionSindicato(
                 13L, "1RO DE MAYO", 1, 1, 0, 0, 0, List.of(), List.of());
-        doReturn(panel).when(servicio).panelImpresionSindicato(13L);
     }
 
     @Test
     void confirmarGuardaLaTandaYElEstadoAnterior() {
+        doReturn(panel).when(servicio).panelImpresionSindicato(13L);
         when(productorRepository.findAllById(any())).thenReturn(List.of(productor));
         when(productorRepository.findAllByIdParaImpresion(anyList()))
                 .thenReturn(List.of(productor));
@@ -99,6 +101,7 @@ class CredencialServiceImpresionTest {
 
     @Test
     void revisarPuedeCancelarYVolverAConfirmarSinDuplicarConteos() {
+        doReturn(panel).when(servicio).panelImpresionSindicato(13L);
         LocalDateTime enviada = LocalDateTime.of(2026, 9, 1, 9, 15);
         productor.setCredencialImpresiones(3);
         productor.setCredencialUltimaImpresion(enviada);
@@ -128,5 +131,52 @@ class CredencialServiceImpresionTest {
         assertThat(productor.getCredencialImpresiones()).isEqualTo(3);
         assertThat(productor.getCredencialUltimaImpresion()).isEqualTo(enviada);
         assertThat(detalle.isContabilizado()).isTrue();
+    }
+
+    @Test
+    void observadoNoPuedeContabilizarseNiConElEndpointManual() {
+        productor.setObservacionManual("REVISAR CÉDULA");
+        when(productorRepository.findById(81L)).thenReturn(Optional.of(productor));
+
+        assertThatThrownBy(() -> servicio.confirmarAnversoImpreso(81L))
+                .hasMessageContaining("REVISAR CÉDULA")
+                .hasMessageContaining("no se imprime");
+        assertThat(productor.getCredencialImpresiones()).isEqualTo(2);
+    }
+
+    @Test
+    void deshabilitadoNoPuedeContabilizarseNiConElEndpointManual() {
+        productor.setEstado(false);
+        when(productorRepository.findById(81L)).thenReturn(Optional.of(productor));
+
+        assertThatThrownBy(() -> servicio.confirmarAnversoImpreso(81L))
+                .hasMessageContaining("deshabilitado")
+                .hasMessageContaining("no se imprime");
+        assertThat(productor.getCredencialImpresiones()).isEqualTo(2);
+    }
+
+    @Test
+    void revisionSieNaranjaNoPuedeContabilizarse() {
+        productor.setRevisionSieEstado(EstadoRevisionSieProductor.NO_ENCONTRADO);
+        productor.setRevisionSieMensaje("La cédula no fue encontrada en SIE");
+        when(productorRepository.findById(81L)).thenReturn(Optional.of(productor));
+
+        assertThatThrownBy(() -> servicio.confirmarAnversoImpreso(81L))
+                .hasMessageContaining("revisión SIE pendiente")
+                .hasMessageContaining("no fue encontrada");
+        assertThat(productor.getCredencialImpresiones()).isEqualTo(2);
+    }
+
+    @Test
+    void observadoTampocoPuedeContabilizarseEnUnaTandaMasiva() {
+        productor.setObservacionManual("REVISAR CÉDULA");
+        when(productorRepository.findAllById(any())).thenReturn(List.of(productor));
+        when(productorRepository.findAllByIdParaImpresion(anyList()))
+                .thenReturn(List.of(productor));
+
+        assertThatThrownBy(() -> servicio.confirmarAnversosImpresos(13L,
+                new CredencialService.SeleccionImpresion(List.of(81L), true)))
+                .hasMessageContaining("REVISAR CÉDULA");
+        assertThat(productor.getCredencialImpresiones()).isEqualTo(2);
     }
 }

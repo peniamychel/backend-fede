@@ -1,6 +1,8 @@
 package com.federa.backend.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.federa.backend.model.enums.EstadoLote;
+import com.federa.backend.model.enums.EstadoRevisionSieProductor;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -147,6 +149,35 @@ public class Productor extends EntidadAuditable {
     @Builder.Default
     private boolean revisionSiePendiente = false;
 
+    /** Último resultado persistente de la comprobación de identidad en SIE. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "revision_sie_estado", length = 32)
+    private EstadoRevisionSieProductor revisionSieEstado;
+
+    /** Mensaje que explica el resultado y permanece visible en la ficha. */
+    @Column(name = "revision_sie_mensaje", length = 500)
+    private String revisionSieMensaje;
+
+    /** Propuesta conservada para aceptarla luego sin volver a consultar SIE. */
+    @Column(name = "sie_nombres_sugeridos", length = 60)
+    private String sieNombresSugeridos;
+
+    @Column(name = "sie_apellidos_sugeridos", length = 60)
+    private String sieApellidosSugeridos;
+
+    /** Clasificación declarada sin parcela asignada; se transfiere al crear su lote. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "clasificacion_pendiente", length = 30)
+    private EstadoLote clasificacionPendiente;
+
+    /**
+     * Motivo de una observacion administrativa detectada durante una revision
+     * manual. Mientras tenga texto, el productor queda fuera de la impresion
+     * de credenciales. Es independiente de los vetos decididos en asamblea.
+     */
+    @Column(name = "observacion_manual", length = 500)
+    private String observacionManual;
+
     /**
      * Cantidad de trabajos de impresión de anverso confirmados para este
      * productor. El reverso no modifica este valor porque es común a todo el
@@ -248,6 +279,16 @@ public class Productor extends EntidadAuditable {
     @Transient
     public boolean isTieneFoto() {
         return fotoDescripcion != null && !fotoDescripcion.isBlank();
+    }
+
+    @Transient
+    public boolean isObservado() {
+        return observacionManual != null && !observacionManual.isBlank();
+    }
+
+    @Transient
+    public boolean isRevisionSieBloqueaImpresion() {
+        return revisionSieEstado != null && revisionSieEstado.bloqueaImpresion();
     }
 
     /**

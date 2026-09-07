@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Comparator;
+import java.util.Locale;
 
 /**
  * Carga masiva del padrón desde la planilla MATRIX.
@@ -86,7 +87,9 @@ public class ImportacionService {
      *                              nunca se crean durante una importación
      * @param ignorarFilasConError  importa las filas válidas aunque otras fallen
      */
-    public ImportacionResponse importar(InputStream archivo, Long federacionId, boolean simular,
+    // Serializa las importaciones en este backend para que dos cargas simultáneas
+    // no validen la misma cédula antes de que la primera confirme su transacción.
+    public synchronized ImportacionResponse importar(InputStream archivo, Long federacionId, boolean simular,
                                         boolean crearJerarquia, boolean ignorarFilasConError) {
         long inicio = System.nanoTime();
 
@@ -136,6 +139,9 @@ public class ImportacionService {
 
         /** Identidades ya existentes, para detectar una segunda carga de la misma planilla. */
         private final Set<String> yaExistentes = new HashSet<>();
+
+        private final Map<String, Long> cedulasRegistradas = new HashMap<>();
+        private final Map<String, List<Integer>> filasPorCedula = new HashMap<>();
 
         /** Por central, el número que le toca al próximo productor. */
         private final Map<Long, Integer> proximoNumero = new HashMap<>();
@@ -188,10 +194,24 @@ public class ImportacionService {
             for (Object[] fila : productorRepository.findIdentidadesPorFederacion(federacionId)) {
                 yaExistentes.add(claveIdentidad((Long) fila[0], (String) fila[1], (String) fila[2]));
             }
+            for (Object[] fila : productorRepository.findCedulasParaImportacion()) {
+                String clave = claveCedula((String) fila[0]);
+                if (clave != null) {
+                    cedulasRegistradas.putIfAbsent(clave, (Long) fila[1]);
+                }
+            }
         }
 
         private void ejecutar(List<LectorPlanilla.Fila> filas) {
             filasLeidas = filas.size();
+            // Se revisan todas las filas antes de crear entidades. Si dos filas
+            // discrepan sobre una misma CI, no se elige arbitrariamente la primera.
+            for (LectorPlanilla.Fila fila : filas) {
+                String clave = claveCedula(fila.ci());
+                if (clave != null) {
+                    filasPorCedula.computeIfAbsent(clave, k -> new ArrayList<>()).add(fila.numero());
+                }
+            }
             for (LectorPlanilla.Fila fila : filas) {
                 procesar(fila);
             }
@@ -230,6 +250,24 @@ public class ImportacionService {
             if (excede(ci, MAX_CI)) {
                 rechazar(fila, "ci", ci, "la cédula supera los " + MAX_CI + " caracteres");
                 return;
+            }
+            String claveCi = claveCedula(ci);
+            if (claveCi != null) {
+                Long registrado = cedulasRegistradas.get(claveCi);
+                if (registrado != null) {
+                    rechazar(fila, "ci", ci, "la cédula ya está registrada en el productor ID "
+                            + registrado + ". No se permite importar otra persona con la misma cédula");
+                    return;
+                }
+                List<Integer> repetidas = filasPorCedula.get(claveCi);
+                if (repetidas.size() > 1) {
+                    String ubicaciones = repetidas.stream().limit(10)
+                            .map(String::valueOf).collect(java.util.stream.Collectors.joining(", "));
+                    rechazar(fila, "ci", ci, "la cédula se repite en las filas " + ubicaciones
+                            + (repetidas.size() > 10 ? " y otras" : "")
+                            + " del Excel. Dejá una sola fila por cédula antes de importar");
+                    return;
+                }
             }
             if (excede(numeroLote, MAX_LOTE)) {
                 rechazar(fila, "numeroLote", numeroLote,
@@ -313,6 +351,10 @@ public class ImportacionService {
             productor.setRevisionSiePendiente(true);
             productor.setSindicato(sindicato);
             productor.setCorrelativo(numerarEn(central));
+            // No crear tierra ficticia ni perder la clasificación declarada en el Excel.
+            if (numeroLote == null) {
+                productor.setClasificacionPendiente(clasificacion);
+            }
 
             if (numeroLote != null) {
                 // El lote se da de alta en el sindicato —ahí está la tierra— y
@@ -473,6 +515,14 @@ public class ImportacionService {
             case "COMUNITARIO" -> EstadoLote.COMUNITARIO;
             default -> null;
         };
+    }
+
+    /** Compara sin espacios ni diferencias de mayúsculas; conserva ceros y complementos. */
+    static String claveCedula(String valor) {
+        String limpio = Textos.limpiar(valor);
+        if (limpio == null) return null;
+        String clave = limpio.replaceAll("[\\s\\p{Z}]+", "").toUpperCase(Locale.ROOT);
+        return clave.isEmpty() || clave.equals("-") ? null : clave;
     }
 
     private static int ordenExtension(String extension) {
