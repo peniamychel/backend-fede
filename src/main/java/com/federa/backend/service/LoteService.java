@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -153,9 +154,7 @@ public class LoteService {
         Map<GrupoLote, List<TenenciaLote>> grupos = new LinkedHashMap<>();
         for (TenenciaLote tenencia : tenenciaRepository.findVigentesConNumero()) {
             Lote lote = tenencia.getLote();
-            GrupoLote clave = new GrupoLote(
-                    lote.getSindicato().getId(),
-                    lote.getNumero().trim().toUpperCase(java.util.Locale.ROOT));
+            GrupoLote clave = grupoDe(lote);
             grupos.computeIfAbsent(clave, ignorada -> new java.util.ArrayList<>())
                     .add(tenencia);
         }
@@ -165,7 +164,7 @@ public class LoteService {
             boolean requiereRevision = grupo.size() > 1
                     || grupo.get(0).getProductor().getLetraCodigo() != null;
             if (requiereRevision) {
-                recalcularCodigosDelGrupo(grupo.get(0).getLote());
+                aplicarLetrasDelGrupo(grupo.get(0).getLote(), new ArrayList<>(grupo));
             }
             if (grupo.size() > 1) {
                 repetidos++;
@@ -484,10 +483,44 @@ public class LoteService {
         List<TenenciaLote> grupo = new ArrayList<>(
                 tenenciaRepository.findVigentesDelNumero(
                         lote.getSindicato().getId(), lote.getNumero()));
+        aplicarLetrasDelGrupo(lote, grupo);
+    }
+
+    /**
+     * Recalcula varios números compartidos leyendo las tenencias una sola vez.
+     * Una conciliación masiva puede cambiar la prioridad de cientos de lotes;
+     * consultar cada grupo por separado convertía esa operación en cientos de
+     * viajes adicionales a la base de datos.
+     */
+    void recalcularCodigosDeGrupos(Collection<Lote> lotes) {
+        Map<GrupoLote, Lote> referencias = new LinkedHashMap<>();
+        for (Lote lote : lotes) {
+            if (lote.getNumero() != null && !lote.getNumero().isBlank()) {
+                referencias.putIfAbsent(grupoDe(lote), lote);
+            }
+        }
+        if (referencias.isEmpty()) {
+            return;
+        }
+
+        Map<GrupoLote, List<TenenciaLote>> grupos = new LinkedHashMap<>();
+        for (TenenciaLote tenencia : tenenciaRepository.findVigentesConNumero()) {
+            GrupoLote clave = grupoDe(tenencia.getLote());
+            if (referencias.containsKey(clave)) {
+                grupos.computeIfAbsent(clave, ignorada -> new ArrayList<>()).add(tenencia);
+            }
+        }
+        for (Map.Entry<GrupoLote, Lote> entrada : referencias.entrySet()) {
+            aplicarLetrasDelGrupo(entrada.getValue(),
+                    grupos.getOrDefault(entrada.getKey(), List.of()));
+        }
+    }
+
+    private void aplicarLetrasDelGrupo(Lote referencia, List<TenenciaLote> grupo) {
         if (grupo.size() > LETRAS_COMPARTIDAS.length) {
             throw new ReglaNegocioException(String.format(
                     "El lote %s ya alcanzó el máximo de %d productores (letras A-H).",
-                    lote.getCodigo(), LETRAS_COMPARTIDAS.length));
+                    referencia.getCodigo(), LETRAS_COMPARTIDAS.length));
         }
         if (grupo.isEmpty()) {
             return;
@@ -506,6 +539,11 @@ public class LoteService {
             Productor productor = grupo.get(i).getProductor();
             productor.setLetraCodigo(LETRAS_COMPARTIDAS[i]);
         }
+    }
+
+    private GrupoLote grupoDe(Lote lote) {
+        return new GrupoLote(lote.getSindicato().getId(),
+                lote.getNumero().trim().toUpperCase(java.util.Locale.ROOT));
     }
 
     private record GrupoLote(Long sindicatoId, String numero) {
@@ -534,10 +572,15 @@ public class LoteService {
     }
 
     private void aplicar(Lote lote, LoteRequest request) {
+        EstadoLote estado = EstadoLote.desde(request.estado());
+        if (estado == EstadoLote.SIN_SISTEMA) {
+            throw new ReglaNegocioException(
+                    "SIN SISTEMA dejó de ser una clasificación disponible. Usá BLANCO.");
+        }
         lote.setNumero(Textos.limpiar(request.numero()));
         lote.setExtension(ExtensionLote.desde(request.extension()));
         lote.setEstadoOriginal(Textos.limpiar(request.estado()));
-        lote.setEstadoLote(EstadoLote.desde(request.estado()));
+        lote.setEstadoLote(estado);
         lote.setMercado(Mercado.desde(request.mercado()));
         lote.setSuperficie(request.superficie());
     }

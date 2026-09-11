@@ -26,7 +26,8 @@ public class InformeNominalImpresionCentralService {
      * termine repetido en cada productor del sindicato.
      */
     private static final Set<String> DATOS_DEL_PRODUCTOR = Set.of(
-            "Apellidos", "Cédula", "Fotografía", "Número de lote", "Número en la central");
+            "Apellidos", "Cédula", "Fotografía", "Número de lote", "Número en la central",
+            "Observado");
 
     private final CentralRepository centralRepository;
     private final SindicatoRepository sindicatoRepository;

@@ -27,6 +27,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 
 class LoteCodigoCompartidoTest {
 
@@ -159,6 +161,27 @@ class LoteCodigoCompartidoTest {
     }
 
     @Test
+    void recalculaVariosGruposConUnaSolaConsulta() {
+        Lote primero = lote(10L);
+        Lote segundo = lote(11L);
+        segundo.setNumero("99");
+        Productor productorUno = productor(1L, 78);
+        Productor productorDos = productor(2L, 79);
+        productorUno.setLetraCodigo("A");
+        productorDos.setLetraCodigo("A");
+        when(tenencias.findVigentesConNumero()).thenReturn(List.of(
+                tenencia(1L, primero, productorUno),
+                tenencia(2L, segundo, productorDos)));
+
+        servicio.recalcularCodigosDeGrupos(List.of(primero, segundo));
+
+        assertThat(productorUno.getLetraCodigo()).isNull();
+        assertThat(productorDos.getLetraCodigo()).isNull();
+        verify(tenencias).findVigentesConNumero();
+        verify(tenencias, never()).findVigentesDelNumero(anyLong(), any());
+    }
+
+    @Test
     void noPermiteMasDeOchoProductoresEnElMismoNumero() {
         Lote referencia = lote(10L);
         List<TenenciaLote> grupo = new ArrayList<>();
@@ -249,7 +272,7 @@ class LoteCodigoCompartidoTest {
         when(tenencias.findVigentesDelNumero(7L, "99"))
                 .thenReturn(List.of(tenenciaMovida));
         servicio.actualizar(10L, new LoteRequest(
-                "99", null, "SIN_SISTEMA", null, 7L, null, null));
+                "99", null, "BLANCO", null, 7L, null, null));
 
         assertThat(movido.getNumero()).isEqualTo("99");
         assertThat(primero.getLetraCodigo()).isNull();

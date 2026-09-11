@@ -42,7 +42,7 @@ class SistemaClasificacionTest {
     }
 
     @Test
-    void retirarTambienClasificaLaParcelaComoSinSistema() {
+    void retirarTambienClasificaLaParcelaComoBlanco() {
         Sistema sistema = sistema();
         Lote lote = lote();
         lote.setEstadoLote(EstadoLote.CON_SISTEMA);
@@ -56,8 +56,8 @@ class SistemaClasificacionTest {
 
         servicio.trasladar(1L, null, peticion());
 
-        assertThat(lote.getEstadoLote()).isEqualTo(EstadoLote.SIN_SISTEMA);
-        assertThat(lote.getEstadoOriginal()).isEqualTo("SIN_SISTEMA");
+        assertThat(lote.getEstadoLote()).isEqualTo(EstadoLote.BLANCO);
+        assertThat(lote.getEstadoOriginal()).isEqualTo("BLANCO");
     }
 
     private Sistema sistema() {

@@ -95,11 +95,17 @@ en producción sin copiar el archivo local.
 | `DB_URL` | Conexión a MariaDB | `localhost:3307/federa` |
 | `DB_USUARIO` / `DB_CONTRASENA` | Credenciales de la base | usuario local de MariaDB |
 | `SIE_URL` / `SIE_TOKEN` | Consulta de datos personales por cédula | URL oficial / token vigente |
+| `MARIADB_DUMP` | Ejecutable utilizado por los respaldos internos | `C:/Program Files/MariaDB 10.11/bin/mariadb-dump.exe` |
 | `JWT_CLAVE` | Firma de los tokens, base64, mínimo 32 bytes | vacía |
 | `ADMIN_USUARIO` / `ADMIN_CONTRASENA` | Usuario que se crea la primera vez | `admin` / `admin` |
 
 Con `JWT_CLAVE` vacía se genera una al arrancar: sirve para probar, pero las
 sesiones se caen en cada reinicio.
+
+Los respaldos automáticos no muestran una confirmación: se ejecutan diariamente
+a las 02:00 de `America/La_Paz` mientras el backend esté encendido. En Docker el
+ejecutable se configura como `/usr/bin/mariadb-dump`; en desarrollo, `.env` debe
+apuntar a la versión de MariaDB instalada en Windows.
 
 **Ninguna contraseña de verdad debe entrar al repositorio.** Una vez que queda
 en el historial de git, sacarla obliga a reescribir el historial entero.

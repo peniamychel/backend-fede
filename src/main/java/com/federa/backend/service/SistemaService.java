@@ -142,7 +142,8 @@ public class SistemaService {
                 actual.setObservaciones(Textos.limpiar(peticion.observaciones()));
             }
             tenenciaRepository.saveAndFlush(actual);
-            clasificar(loteAnterior, EstadoLote.SIN_SISTEMA);
+            // Al retirar el equipo queda BLANCO hasta una nueva clasificación.
+            clasificar(loteAnterior, EstadoLote.BLANCO);
         } else if (loteId == null) {
             throw new ReglaNegocioException(
                     "El sistema " + sistema.getCodigo() + " no está en ningún lote.");

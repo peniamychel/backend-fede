@@ -106,7 +106,7 @@ class RequisitosCredencialTest {
 
         List<Faltante> faltantes = requisitos.delProductor(productor, true, true);
 
-        assertThat(faltantes).filteredOn(f -> f.campo().equals("Observación manual"))
+        assertThat(faltantes).filteredOn(f -> f.campo().equals("Observado"))
                 .singleElement()
                 .satisfies(f -> assertThat(f.detalle()).isEqualTo("REVISAR CÉDULA"));
     }

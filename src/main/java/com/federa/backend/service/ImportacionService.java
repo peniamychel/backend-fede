@@ -288,7 +288,7 @@ public class ImportacionService {
             }
             if (fila.clasificacion() != null && clasificacion == null) {
                 rechazar(fila, "clasificacion", fila.clasificacion(),
-                        "la clasificación debe ser SIN SISTEMA, SISTEMA, BLANCO, "
+                        "la clasificación debe ser SISTEMA, BLANCO, "
                                 + "FRACCIONADO, DETALLISTA o COMUNITARIO");
                 return;
             }
@@ -370,7 +370,7 @@ public class ImportacionService {
                 lote.setNumero(numeroLote);
                 lote.setSindicato(sindicato);
                 EstadoLote clasificacionDefinitiva = clasificacion == null
-                        ? EstadoLote.SIN_SISTEMA
+                        ? EstadoLote.BLANCO
                         : clasificacion;
                 lote.setEstadoLote(clasificacionDefinitiva);
                 lote.setEstadoOriginal(clasificacionDefinitiva == EstadoLote.CON_SISTEMA
@@ -508,7 +508,6 @@ public class ImportacionService {
         }
         return switch (normalizada) {
             case "SISTEMA" -> EstadoLote.CON_SISTEMA;
-            case "SIN SISTEMA" -> EstadoLote.SIN_SISTEMA;
             case "BLANCO" -> EstadoLote.BLANCO;
             case "FRACCIONADO" -> EstadoLote.FRACCIONADO;
             case "DETALLISTA" -> EstadoLote.DETALLISTA;

@@ -8,11 +8,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ImportacionValoresTest {
 
     @Test
-    void aceptaSoloLasSeisClasificacionesDelImportador() {
+    void aceptaSoloLasCincoClasificacionesVigentesDelImportador() {
         assertThat(ImportacionService.clasificacionImportada("SISTEMA"))
                 .isEqualTo(EstadoLote.CON_SISTEMA);
-        assertThat(ImportacionService.clasificacionImportada("sin sistema"))
-                .isEqualTo(EstadoLote.SIN_SISTEMA);
         assertThat(ImportacionService.clasificacionImportada("BLANCO"))
                 .isEqualTo(EstadoLote.BLANCO);
         assertThat(ImportacionService.clasificacionImportada("fraccionado"))
@@ -27,5 +25,6 @@ class ImportacionValoresTest {
     void rechazaUnaClasificacionFueraDeLaLista() {
         assertThat(ImportacionService.clasificacionImportada("NUEVO")).isNull();
         assertThat(ImportacionService.clasificacionImportada("OTRO")).isNull();
+        assertThat(ImportacionService.clasificacionImportada("SIN SISTEMA")).isNull();
     }
 }

@@ -71,7 +71,7 @@ public class RequisitosCredencial {
                     EN_LA_FICHA + " → Habilitar"));
         }
         if (productor.isObservado()) {
-            faltantes.add(new Faltante("Observación manual",
+            faltantes.add(new Faltante("Observado",
                     productor.getObservacionManual(),
                     EN_LA_FICHA + " → Editar observación"));
         }

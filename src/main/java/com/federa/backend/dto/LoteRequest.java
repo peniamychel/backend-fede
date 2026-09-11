@@ -34,11 +34,11 @@ public record LoteRequest(
         String extension,
 
         @Schema(description = "Clasificación de la participación en la parcela. Opciones de "
-                + "asignación: SIN_SISTEMA, CON_SISTEMA, BLANCO, FRACCIONADO, DETALLISTA y "
+                + "asignación: CON_SISTEMA, BLANCO, FRACCIONADO, DETALLISTA y "
                 + "COMUNITARIO. También normaliza textos históricos como SISTEMA/C-S/SI, NO "
                 + "y FRANSIONADOS. Si no se reconoce queda como DESCONOCIDO y conserva el "
                 + "texto original.", example = "COMUNITARIO",
-                allowableValues = {"SIN_SISTEMA", "CON_SISTEMA", "BLANCO", "FRACCIONADO",
+                allowableValues = {"CON_SISTEMA", "BLANCO", "FRACCIONADO",
                         "DETALLISTA", "COMUNITARIO"}, maxLength = 30)
         @Size(max = 30, message = "el estado del lote no puede superar los 30 caracteres")
         String estado,

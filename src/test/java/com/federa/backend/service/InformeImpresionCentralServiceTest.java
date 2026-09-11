@@ -107,7 +107,7 @@ class InformeImpresionCentralServiceTest {
                                                 "Sello de la central",
                                                 "Secretario General de la central",
                                                 "Firma del secretario general de la central",
-                                                "Cédula", "Número de lote"), 0),
+                                                "Cédula", "Número de lote", "Observado"), 0),
                                 filaNominal(10L, "ANA", "QUISPE",
                                         List.of("Sello del sindicato",
                                                 "Sello de la central"), 0))));
@@ -127,7 +127,7 @@ class InformeImpresionCentralServiceTest {
                 .extracting(InformeNominalImpresionCentral.Fila::productorId)
                 .containsExactly(9L);
         assertThat(informe.sindicatos().get(0).faltantesDatos().get(0).datosFaltantes())
-                .containsExactly("Fotografía", "Cédula", "Número de lote");
+                .containsExactly("Fotografía", "Cédula", "Número de lote", "Observado");
     }
 
     @Test
@@ -141,7 +141,8 @@ class InformeImpresionCentralServiceTest {
                                 LocalDateTime.of(2026, 8, 28, 10, 30), List.of())),
                         List.of(new InformeNominalImpresionCentral.Fila(
                                 9L, "JUAN", "MAMANI", "", "23", "2-13J-9", 0,
-                                null, List.of("Fotografía", "Cédula", "Número de lote"))))));
+                                null, List.of("Fotografía", "Cédula", "Número de lote",
+                                        "Observado"))))));
 
         byte[] pdf = new InformeNominalImpresionCentralPdf().generar(informe);
         Files.createDirectories(Path.of("target"));
@@ -153,7 +154,8 @@ class InformeImpresionCentralServiceTest {
             assertThat(texto).contains(
                     "INFORME NOMINAL DE IMPRESIÓN DE CARNET DE PRODUCTOR",
                     "MARÍA", "JUAN",
-                    "Fotografía, Cédula, Número de lote", "CONSTANCIA DE RECEPCIÓN",
+                    "Fotografía, Cédula, Número de lote, Observado",
+                    "CONSTANCIA DE RECEPCIÓN",
                     "Nombre de quien recibe", "Firma", "Entregado por", "Página 1 de 1");
             assertThat(texto).doesNotContain("IMPRESIONES", "ÚLTIMA IMPRESIÓN");
             assertThat(lector.getPageSize(1).getHeight())

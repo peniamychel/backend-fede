@@ -152,4 +152,16 @@ public interface ProductorRepository extends JpaRepository<Productor, Long> {
             where p.sindicato.central.federacion.id = :federacionId
             """)
     List<Object[]> findIdentidadesPorFederacion(@Param("federacionId") Long federacionId);
+
+    /** Padrón completo con jerarquía y parcelas actuales para conciliar una nómina externa. */
+    @Query("""
+            select distinct p from Productor p
+              join fetch p.sindicato s
+              join fetch s.central c
+              join fetch c.federacion f
+              left join fetch p.tenencias t
+              left join fetch t.lote l
+            order by p.id
+            """)
+    List<Productor> findAllParaConciliacionUdestro();
 }

@@ -150,7 +150,7 @@ class ImportacionCedulasTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"SISTEMA", "SIN SISTEMA", "BLANCO", "FRACCIONADO", "DETALLISTA", "COMUNITARIO"})
+    @ValueSource(strings = {"SISTEMA", "BLANCO", "FRACCIONADO", "DETALLISTA", "COMUNITARIO"})
     void conservaClasificacionSinCrearUnLoteFicticio(String clasificacion) throws Exception {
         var resultado = importarFilas(false, false, clasificacion, "", "123456");
         assertThat(resultado.filasRechazadas()).isZero();
