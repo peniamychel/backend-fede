@@ -21,8 +21,18 @@ public record InformeImpresionCentral(
         int pendientesConFoto,
         int sinFoto,
         int listosParaImprimir,
+        int observados,
+        int sistema,
+        int sinSistema,
         double porcentajeAvance,
+        List<AvanceFase> avancesFase,
         List<FilaSindicato> detalle) {
+
+    /** Porcentaje acumulado alcanzado al terminar o durante una fase. */
+    public record AvanceFase(
+            int numeroFase,
+            double porcentajeAvance) {
+    }
 
     /** Cifras de un sindicato, calculadas con las reglas de impresión masiva. */
     public record FilaSindicato(
@@ -35,6 +45,10 @@ public record InformeImpresionCentral(
             int pendientesConFoto,
             int sinFoto,
             int listosParaImprimir,
-            double porcentajeAvance) {
+            int observados,
+            int sistema,
+            int sinSistema,
+            double porcentajeAvance,
+            List<AvanceFase> avancesFase) {
     }
 }

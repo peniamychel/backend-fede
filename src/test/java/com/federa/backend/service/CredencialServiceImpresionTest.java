@@ -2,8 +2,10 @@ package com.federa.backend.service;
 
 import com.federa.backend.almacen.AlmacenObjetos;
 import com.federa.backend.model.DetalleGrupoImpresionCredencial;
+import com.federa.backend.model.FaseImpresionCarnet;
 import com.federa.backend.model.GrupoImpresionCredencial;
 import com.federa.backend.model.Productor;
+import com.federa.backend.model.ProductorFaseImpresion;
 import com.federa.backend.model.Sindicato;
 import com.federa.backend.model.enums.EstadoRevisionSieProductor;
 import com.federa.backend.repository.CargoRepository;
@@ -50,6 +52,7 @@ class CredencialServiceImpresionTest {
     @Mock DisenoCredencialService disenoCredencialService;
     @Mock GrupoImpresionCredencialRepository grupoRepository;
     @Mock DetalleGrupoImpresionCredencialRepository detalleRepository;
+    @Mock FaseImpresionCarnetService faseImpresionCarnetService;
 
     private CredencialService servicio;
     private Sindicato sindicato;
@@ -62,7 +65,8 @@ class CredencialServiceImpresionTest {
         servicio = spy(new CredencialService(productorRepository, sindicatoRepository,
                 loteRepository, imagenRepository, cargoRepository, almacen, generador,
                 generadorDirigente, generadorQr, requisitos, vetoService,
-                disenoCredencialService, grupoRepository, detalleRepository));
+                disenoCredencialService, grupoRepository, detalleRepository,
+                faseImpresionCarnetService));
         sindicato = Sindicato.builder().id(13L).nombre("1RO DE MAYO").build();
         impresionAnterior = LocalDateTime.of(2026, 8, 20, 10, 30);
         productor = Productor.builder().id(81L).nombres("MARÍA").apellidos("PÉREZ")
@@ -79,6 +83,18 @@ class CredencialServiceImpresionTest {
         when(productorRepository.findAllByIdParaImpresion(anyList()))
                 .thenReturn(List.of(productor));
         when(sindicatoRepository.findById(13L)).thenReturn(Optional.of(sindicato));
+        FaseImpresionCarnet fase = new FaseImpresionCarnet();
+        fase.setId(7L);
+        fase.setNumero(1);
+        ProductorFaseImpresion participante = new ProductorFaseImpresion();
+        participante.setFase(fase);
+        participante.setProductor(productor);
+        participante.setPendiente(true);
+        when(faseImpresionCarnetService.prepararSeleccion(
+                13L, List.of(productor), true))
+                .thenReturn(fase);
+        when(faseImpresionCarnetService.participante(fase, 81L))
+                .thenReturn(participante);
         when(grupoRepository.saveAndFlush(any())).thenAnswer(invocacion -> {
             GrupoImpresionCredencial grupo = invocacion.getArgument(0);
             grupo.setId(41L);

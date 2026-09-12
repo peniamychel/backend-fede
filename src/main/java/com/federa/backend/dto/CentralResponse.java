@@ -12,8 +12,8 @@ public record CentralResponse(
         @Schema(description = "Nombre normalizado.", example = "13 DE JUNIO")
         String nombre,
 
-        @Schema(description = "Sigla de tres letras, en mayúsculas. Null si todavía no se cargó.",
-                example = "IVI")
+        @Schema(description = "Código membretado en mayúsculas; admite tres letras o números, "
+                + "o dos dígitos. Null si todavía no se cargó.", example = "IVI")
         String abreviatura,
 
         @Schema(description = "Id de la federación.", example = "1")
@@ -22,6 +22,12 @@ public record CentralResponse(
         @Schema(description = "Nombre de la federación, para no tener que pedirla aparte.",
                 example = "FEDERA")
         String federacionNombre,
+
+        @Schema(description = "Número de la fase de impresión abierta. Null si no hay ninguna.")
+        Integer faseImpresionActivaNumero,
+
+        @Schema(description = "Última fase creada, incluida una fase ya cerrada.")
+        int ultimaFaseImpresionNumero,
 
         Auditoria auditoria
 ) {
@@ -33,6 +39,8 @@ public record CentralResponse(
                 central.getAbreviatura(),
                 central.getFederacion().getId(),
                 central.getFederacion().getNombre(),
+                central.getFaseImpresionActivaNumero(),
+                central.getUltimaFaseImpresionNumero(),
                 Auditoria.desde(central));
     }
 }

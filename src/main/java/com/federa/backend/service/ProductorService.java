@@ -88,6 +88,8 @@ public class ProductorService {
     public ProductorResponse crear(ProductorRequest request) {
         Productor productor = new Productor();
         aplicar(productor, request);
+        productor.setFaseImpresionPendiente(true);
+        productor.setReimpresionFasePendiente(false);
         return ProductorResponse.desde(productorRepository.save(productor));
     }
 
@@ -97,6 +99,8 @@ public class ProductorService {
         boolean cambioDeIdentidad = cambioDeIdentidad(productor, request);
         String identidadAnterior = identidadDe(productor);
         aplicar(productor, request);
+        productor.setFaseImpresionPendiente(true);
+        productor.setReimpresionFasePendiente(productor.getCredencialImpresiones() > 0);
         if (cambioDeIdentidad && productor.getRevisionSieEstado() != null) {
             marcarCorregidoManualmente(productor, identidadAnterior);
         }

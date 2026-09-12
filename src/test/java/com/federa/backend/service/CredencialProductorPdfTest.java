@@ -50,7 +50,7 @@ class CredencialProductorPdfTest {
                 "CANDIDO", "COLQUECHAMBI MAMANI", "3692655", "12 A",
                 foto, null, null, null, presidente, secretario, null,
                 "09/08/2026", "AB12CD34EF",
-                "2-1MO-7", qr());
+                "21MO7", qr());
     }
 
     private String texto(byte[] pdf, int pagina) throws IOException {
@@ -246,7 +246,7 @@ class CredencialProductorPdfTest {
                 .contains("ALTO SAN SALVADOR")
                 .contains("1RO MAYO")
                 .contains("CARRASCO")
-                .contains("2-1MO-7");
+                .contains("21MO7");
         // La plantilla no tiene campo de cédula; el N° superior es el código
         // institucional del padrón.
         assertThat(anverso).doesNotContain("3692655");
@@ -349,7 +349,7 @@ class CredencialProductorPdfTest {
                 "FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
                 "MARÍA DE LOS ÁNGELES", "COLQUECHAMBI DE VILLARROEL SAAVEDRA",
                 "8005906-1V", "50-51, 57-A", null, null, null, "09/08/2026",
-                "AB12CD34EF", "2-1MO-7", qr());
+                "AB12CD34EF", "21MO7", qr());
 
         String anverso = texto(generador.generar(largo), 1);
 
@@ -363,7 +363,7 @@ class CredencialProductorPdfTest {
     void codigoDelPadron() throws IOException {
         String anverso = texto(generador.generar(credencial(null, null, null)), 1);
 
-        assertThat(anverso).contains("2-1MO-7");
+        assertThat(anverso).contains("21MO7");
     }
 
     @Test
@@ -449,7 +449,7 @@ class CredencialProductorPdfTest {
                     "FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
                     "PRODUCTOR " + i, "APELLIDO " + i, "800000" + i, String.valueOf(i),
                     null, null, null, "09/08/2026", "CP" + i + "QR",
-                    "2-1MO-" + i, qr()));
+                    "21MO" + i, qr()));
         }
 
         byte[] pdf = generador.generarPliego(tanda);
@@ -479,7 +479,7 @@ class CredencialProductorPdfTest {
                         "FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
                         "MARÍA", "PÉREZ", "8000002", "22 B",
                         null, null, null, "09/08/2026", "SEGUNDAQR",
-                        "2-1MO-22 B", qr()));
+                        "21MO22", qr()));
 
         byte[] caras = generador.generarTarjetas(
                 tanda, DisenoCredencial.porDefecto(), CaraCredencial.ANVERSO);
@@ -564,7 +564,7 @@ class CredencialProductorPdfTest {
                 selloDe("FEDERACIÓN", "CARRASCO"), selloDe("CENTRAL", "1RO MAYO"),
                 selloDe("SINDICATO", "ALTO SAN SALVADOR"), ejecutivo,
                 secretarioCentral, secretarioSindicato, "09/08/2026", "AB12CD34EF",
-                "2-1MO-7", qr());
+                "21MO7", qr());
 
         Files.write(Path.of("target", "credencial-de-muestra.pdf"),
                 generador.generar(muestra));
@@ -577,7 +577,7 @@ class CredencialProductorPdfTest {
                     String.valueOf(i), retratoSinFondo(), muestra.selloFederacion(),
                     muestra.selloCentral(), muestra.selloSindicato(), ejecutivo,
                     secretarioCentral, secretarioSindicato, "09/08/2026", "MUESTRA" + i,
-                    "2-1MO-" + i, qr()));
+                    "21MO" + i, qr()));
         }
         Files.write(Path.of("target", "credenciales-pliego.pdf"),
                 generador.generarPliego(tanda));

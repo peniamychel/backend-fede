@@ -78,6 +78,42 @@ class RevisionSieProductorServiceTest {
     }
 
     @Test
+    void permiteAprobarManualmenteCuandoSieNoEncuentraSinBorrarOtraObservacion() {
+        Productor productor = pendiente("ANA", "ROJAS", "456");
+        productor.setRevisionSiePendiente(false);
+        productor.setRevisionSieEstado(EstadoRevisionSieProductor.NO_ENCONTRADO);
+        productor.setRevisionSieMensaje("La cédula no fue encontrada en SIE.");
+        productor.setObservacionManual("Revisar fotografía");
+        when(productores.findByIdParaRevisionSie(9L)).thenReturn(Optional.of(productor));
+
+        RevisionSieProductorResponse resultado = servicio.aprobarDatosActuales(9L);
+
+        assertThat(resultado.estado())
+                .isEqualTo(RevisionSieProductorResponse.Estado.APROBADA_MANUAL);
+        assertThat(resultado.completada()).isTrue();
+        assertThat(resultado.datosModificados()).isFalse();
+        assertThat(productor.getRevisionSieEstado())
+                .isEqualTo(EstadoRevisionSieProductor.APROBADO_MANUAL);
+        assertThat(productor.isRevisionSieBloqueaImpresion()).isFalse();
+        assertThat(productor.isRevisionSiePendiente()).isFalse();
+        assertThat(productor.getObservacionManual()).isEqualTo("Revisar fotografía");
+        assertThat(productor.getRevisionSieMensaje()).contains("aprobados manualmente");
+        verifyNoInteractions(consulta);
+    }
+
+    @Test
+    void noApruebaManualmenteUnaCorreccionSiePendiente() {
+        Productor productor = pendiente("ANA", "ROJAS", "456");
+        productor.setRevisionSiePendiente(false);
+        productor.setRevisionSieEstado(EstadoRevisionSieProductor.DIFERENCIA_PENDIENTE);
+        when(productores.findByIdParaRevisionSie(9L)).thenReturn(Optional.of(productor));
+
+        assertThatThrownBy(() -> servicio.aprobarDatosActuales(9L))
+                .isInstanceOf(ReglaNegocioException.class)
+                .hasMessageContaining("SIE no encontró");
+    }
+
+    @Test
     void dejaPendienteCuandoSieEstaTemporalmenteNoDisponible() {
         Productor productor = pendiente("ANA", "ROJAS", "789");
         when(productores.findByIdParaRevisionSie(10L)).thenReturn(Optional.of(productor));

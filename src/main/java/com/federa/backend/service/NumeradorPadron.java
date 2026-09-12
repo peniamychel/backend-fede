@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * Reparte los números que llevan los productores dentro de su central: el "1"
- * de {@code 2-IVI-1}.
+ * de {@code 2IVI1}.
  * <p>
  * Vive aparte de {@link ProductorService} y {@link SindicatoService} porque los
  * dos necesitan numerar y el productor ya depende del sindicato: ponerlo en

@@ -84,7 +84,7 @@ public record LoteResponse(
     public record Tenedor(
             @Schema(example = "812") Long productorId,
             @Schema(example = "CANDIDO COLQUECHAMBI MAMANI") String nombre,
-            @Schema(example = "2-13J-78") String codigoPadron,
+            @Schema(example = "213J78") String codigoPadron,
             @Schema(description = "A-H cuando comparte número de lote.", example = "A")
             String letra,
             @Schema(example = "2026-03-01") LocalDate desde) {

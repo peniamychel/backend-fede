@@ -58,10 +58,11 @@ class InformeImpresionFederacionServiceTest {
     void elPdfIncluyeResumenGlobalYCadaSindicato() throws IOException {
         InformeImpresionCentral central = new InformeImpresionCentral(
                 10L, "13 DE JUNIO", "CARRASCO TROPICAL",
-                1, 1, 12, 9, 3, 2, 1, 2, 75,
+                1, 1, 12, 9, 3, 2, 1, 2, 1, 7, 5, 75,
+                List.of(),
                 List.of(new InformeImpresionCentral.FilaSindicato(
                         100L, "1RO DE MAYO", false,
-                        12, 9, 3, 2, 1, 2, 75)));
+                        12, 9, 3, 2, 1, 2, 1, 7, 5, 75, List.of())));
         InformeImpresionFederacion informe = new InformeImpresionFederacion(
                 1L, "CARRASCO TROPICAL", 1, 1, 1,
                 12, 9, 3, 2, 1, 2, 75, List.of(central));
@@ -95,8 +96,9 @@ class InformeImpresionFederacionServiceTest {
         return new InformeImpresionCentral(
                 central.getId(), central.getNombre(), central.getFederacion().getNombre(),
                 sindicatos, sinSello, total, impresos, total - impresos,
-                conFoto, sinFoto, listos,
+                conFoto, sinFoto, listos, 0, 0, total,
                 total == 0 ? 0 : Math.round(impresos * 1000d / total) / 10d,
+                List.of(),
                 List.of());
     }
 }

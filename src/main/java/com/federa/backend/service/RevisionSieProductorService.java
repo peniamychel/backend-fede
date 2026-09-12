@@ -144,6 +144,29 @@ public class RevisionSieProductorService {
                 productor.getRevisionSieMensaje());
     }
 
+    /**
+     * Da por válidos los datos actuales cuando SIE no encontró la cédula.
+     * No borra una observación manual, porque esa marca puede corresponder a
+     * una revisión administrativa diferente de la identidad consultada.
+     */
+    @Transactional
+    public RevisionSieProductorResponse aprobarDatosActuales(Long id) {
+        Productor productor = productores.findByIdParaRevisionSie(id)
+                .orElseThrow(() -> new RecursoNoEncontradoException("productor", id));
+        if (productor.getRevisionSieEstado() != EstadoRevisionSieProductor.NO_ENCONTRADO) {
+            throw new ReglaNegocioException(
+                    "Solo se pueden aprobar manualmente datos que SIE no encontró.");
+        }
+        productor.setRevisionSiePendiente(false);
+        productor.setRevisionSieEstado(EstadoRevisionSieProductor.APROBADO_MANUAL);
+        productor.setRevisionSieMensaje(
+                "Los datos actuales fueron revisados y aprobados manualmente después de que "
+                        + "la cédula no fue encontrada en SIE.");
+        limpiarSugerencia(productor);
+        return respuesta(APROBADA_MANUAL, true, false,
+                productor.getRevisionSieMensaje());
+    }
+
     private Datos datosActuales(Productor productor) {
         return new Datos(productor.getCi(),
                 productor.getNombresCorregidos() != null
@@ -202,6 +225,8 @@ public class RevisionSieProductorService {
             case CORREGIDO_SIE -> respuesta(CORREGIDA, true, false,
                     productor.getRevisionSieMensaje());
             case CORREGIDO_MANUAL -> respuesta(CORREGIDA_MANUAL, true, false,
+                    productor.getRevisionSieMensaje());
+            case APROBADO_MANUAL -> respuesta(APROBADA_MANUAL, true, false,
                     productor.getRevisionSieMensaje());
         };
     }

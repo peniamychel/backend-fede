@@ -57,6 +57,14 @@ public interface LoteRepository extends JpaRepository<Lote, Long> {
             """)
     List<Object[]> findIdentificacionesPorSindicato(@Param("sindicatoId") Long sindicatoId);
 
+    /** Clasificación vigente de cada productor del sindicato. */
+    @Query("""
+            select t.productor.id, l.estadoLote
+              from TenenciaLote t join t.lote l
+             where l.sindicato.id = :sindicatoId and t.vigente = true
+            """)
+    List<Object[]> findClasificacionesPorSindicato(@Param("sindicatoId") Long sindicatoId);
+
     @Query("select l from Lote l where l.estadoLote = com.federa.backend.model.enums.EstadoLote.DESCONOCIDO")
     List<Lote> findConEstadoDesconocido();
 

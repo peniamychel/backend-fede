@@ -16,18 +16,18 @@ public record CentralRequest(
         @Size(max = 60, message = "el nombre no puede superar los 60 caracteres")
         String nombre,
 
-        @Schema(description = "Sigla de tres caracteres, letras o números. Opcional, pero si se "
-                + "manda no puede estar repetida en otra central. Se guarda en mayúsculas y sin "
-                + "espacios sobrantes.",
+        @Schema(description = "Código membretado opcional. Admite tres letras o números, o dos "
+                + "dígitos. Si se manda no puede estar repetido en otra central. Se guarda en "
+                + "mayúsculas y sin espacios sobrantes.",
                 example = "1MO", maxLength = 3)
         // Se admiten dígitos porque varias centrales empiezan con uno: la sigla
         // de 1RO DE MAYO es 1MO.
         //
-        // Y se admite el vacío además de los tres caracteres porque quien deja
-        // el campo en blanco está diciendo «sin abreviatura», no mandando algo
-        // mal escrito. El servicio lo convierte en null.
-        @Pattern(regexp = "\\s*|\\s*[A-Za-z0-9]{3}\\s*",
-                message = "la abreviatura son exactamente 3 caracteres, letras o números")
+        // También existen códigos membretados compuestos únicamente por dos
+        // dígitos. El vacío sigue significando «sin código» y se convierte en
+        // null dentro del servicio.
+        @Pattern(regexp = "\\s*|\\s*(?:[0-9]{2}|[\\p{L}0-9]{3})\\s*",
+                message = "el código membretado debe tener 3 letras o números, o 2 dígitos")
         String abreviatura,
 
         @Schema(description = "Federación a la que pertenece. Devuelve 404 si no existe.",

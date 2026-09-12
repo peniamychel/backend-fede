@@ -104,11 +104,11 @@ public class CentralService {
     }
 
     /**
-     * Deja la sigla como se guarda: sin espacios sobrantes y en mayúsculas.
+     * Deja el código membretado como se guarda: sin espacios sobrantes y en mayúsculas.
      * <p>
      * Se normaliza en el servidor y no solo en el formulario porque de eso
      * depende que la clave única sirva. La base compara el texto tal cual está
-     * guardado, así que "ivi" y "IVI" le parecerían dos siglas distintas y
+     * guardado, así que "ivi" y "IVI" le parecerían dos códigos distintos y
      * dejaría entrar las dos.
      */
     private String abreviaturaDe(String valor) {
@@ -117,7 +117,7 @@ public class CentralService {
     }
 
     /**
-     * La sigla, en cambio, es única entre todas las centrales.
+     * El código membretado es único entre todas las centrales.
      * <p>
      * Se comprueba acá para poder devolver un mensaje que diga cuál es la otra
      * central. La clave única de la base sigue estando: es la que cubre el caso
@@ -131,7 +131,7 @@ public class CentralService {
                 .filter(otra -> !otra.getId().equals(idActual))
                 .ifPresent(otra -> {
                     throw new ReglaNegocioException(
-                            "La abreviatura " + abreviatura + " ya la tiene la central "
+                            "El código membretado " + abreviatura + " ya lo tiene la central "
                                     + otra.getNombre());
                 });
     }

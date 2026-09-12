@@ -8,6 +8,7 @@ import java.util.List;
 @Schema(description = "Vista previa de una credencial, con lo que falta para emitirla.")
 public record CredencialPrevia(
         Long productorId,
+        Long centralId,
         String nombreCompleto,
         String federacion,
         String central,

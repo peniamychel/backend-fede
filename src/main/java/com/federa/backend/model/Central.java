@@ -54,7 +54,8 @@ public class Central extends EntidadAuditable {
     private String nombre;
 
     /**
-     * Sigla de tres caracteres con la que se abrevia a esta central.
+     * Código membretado de la central. Puede tener tres letras o números, o
+     * únicamente dos dígitos.
      * <p>
      * Letras o números: varias centrales empiezan con un dígito, y la sigla de
      * 1RO DE MAYO es 1MO.
@@ -79,6 +80,16 @@ public class Central extends EntidadAuditable {
 
     @Column(name = "sello_original_clave", length = 200)
     private String selloOriginalClave;
+
+    /** Número visible mientras una fase permite imprimir carnets. */
+    @Column(name = "fase_impresion_activa_numero")
+    private Integer faseImpresionActivaNumero;
+
+    /** Último número entregado; nunca se reutiliza al cerrar una fase. */
+    @Column(name = "ultima_fase_impresion_numero", nullable = false,
+            columnDefinition = "integer default 0")
+    @Builder.Default
+    private int ultimaFaseImpresionNumero = 0;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "federacion_id", nullable = false,

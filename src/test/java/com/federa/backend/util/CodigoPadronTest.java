@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * El código del padrón: {@code 2-IVI-1}.
+ * El código del padrón: {@code 2IVI1}.
  * <p>
  * Lo que se prueba acá es sobre todo cuándo <b>no</b> hay código. Hoy ninguna
  * central tiene sigla y la federación no tiene número, así que el caso incompleto
@@ -15,16 +15,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CodigoPadronTest {
 
     @Test
-    @DisplayName("junta las tres partes con guiones")
+    @DisplayName("junta las tres partes sin separadores")
     void arma() {
-        assertThat(CodigoPadron.de("2", "IVI", 1)).isEqualTo("2-IVI-1");
+        assertThat(CodigoPadron.de("2", "IVI", 1)).isEqualTo("2IVI1");
     }
 
     @Test
     @DisplayName("la sigla puede empezar con un número")
     void siglaConDigito() {
         // La de 1RO DE MAYO es 1MO.
-        assertThat(CodigoPadron.de("2", "1MO", 45)).isEqualTo("2-1MO-45");
+        assertThat(CodigoPadron.de("2", "1MO", 45)).isEqualTo("21MO45");
+    }
+
+    @Test
+    @DisplayName("usa el código membretado numérico de dos dígitos sin guiones")
+    void codigoMembretadoNumerico() {
+        assertThat(CodigoPadron.de("2", "01", 22)).isEqualTo("20122");
     }
 
     @Test
@@ -51,7 +57,7 @@ class CodigoPadronTest {
     @Test
     @DisplayName("no devuelve un código a medias")
     void nadaDeCodigosIncompletos() {
-        // La tentación sería devolver "--1" o "2--1" y que se vea algo. Eso
+        // La tentación sería devolver un código parcial y que se vea algo. Eso
         // termina impreso en una credencial que después circula en papel.
         assertThat(CodigoPadron.de(null, null, 1)).isNull();
     }

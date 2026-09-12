@@ -43,7 +43,7 @@ public interface VetoRepository extends JpaRepository<Veto, Long> {
      * <p>
      * Un solo endpoint para las formas en que se pregunta en la práctica: con
      * la cédula en la mano, con cualquiera de los dos códigos —el de la
-     * credencial, que es lo que dice el QR, y el del padrón ({@code 2-IVI-1}),
+     * credencial, que es lo que dice el QR, y el del padrón ({@code 2IVI1}),
      * que es lo que está impreso—, por nombre y apellido cuando no hay papel, o
      * mirando el sindicato entero.
      * <p>
@@ -69,7 +69,7 @@ public interface VetoRepository extends JpaRepository<Veto, Long> {
                    or upper(p.apellidos) like upper(concat('%', :texto, '%'))
                    or p.ci like concat('%', :texto, '%')
                    or upper(p.codigo) = upper(:texto)
-                   or upper(concat(f.numero, '-', c.abreviatura, '-', p.correlativo))
+                   or upper(concat(f.numero, c.abreviatura, p.correlativo))
                         = upper(:texto))
             order by v.desde desc
             """)

@@ -55,6 +55,12 @@ public class DetalleGrupoImpresionCredencial {
     @Column(nullable = false)
     private boolean contabilizado;
 
+    @Column(name = "fase_pendiente_anterior")
+    private Boolean fasePendienteAnterior;
+
+    @Column(name = "fase_impresiones_anteriores")
+    private Integer faseImpresionesAnteriores;
+
     public DetalleGrupoImpresionCredencial(GrupoImpresionCredencial grupo,
                                             Productor productor,
                                             int conteoAnterior,
@@ -64,5 +70,16 @@ public class DetalleGrupoImpresionCredencial {
         this.conteoAnterior = conteoAnterior;
         this.ultimaImpresionAnterior = ultimaImpresionAnterior;
         this.contabilizado = true;
+    }
+
+    public DetalleGrupoImpresionCredencial(GrupoImpresionCredencial grupo,
+                                            Productor productor,
+                                            int conteoAnterior,
+                                            LocalDateTime ultimaImpresionAnterior,
+                                            boolean fasePendienteAnterior,
+                                            int faseImpresionesAnteriores) {
+        this(grupo, productor, conteoAnterior, ultimaImpresionAnterior);
+        this.fasePendienteAnterior = fasePendienteAnterior;
+        this.faseImpresionesAnteriores = faseImpresionesAnteriores;
     }
 }

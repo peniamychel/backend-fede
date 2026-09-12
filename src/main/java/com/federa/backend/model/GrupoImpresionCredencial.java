@@ -45,8 +45,19 @@ public class GrupoImpresionCredencial {
     @Column(name = "enviado_en", nullable = false, columnDefinition = "datetime")
     private LocalDateTime enviadoEn;
 
+    @ManyToOne
+    @JoinColumn(name = "fase_id",
+            foreignKey = @ForeignKey(name = "fk_grupo_impresion_fase"))
+    private FaseImpresionCarnet fase;
+
     public GrupoImpresionCredencial(Sindicato sindicato, LocalDateTime enviadoEn) {
         this.sindicato = sindicato;
         this.enviadoEn = enviadoEn;
+    }
+
+    public GrupoImpresionCredencial(Sindicato sindicato, LocalDateTime enviadoEn,
+                                     FaseImpresionCarnet fase) {
+        this(sindicato, enviadoEn);
+        this.fase = fase;
     }
 }

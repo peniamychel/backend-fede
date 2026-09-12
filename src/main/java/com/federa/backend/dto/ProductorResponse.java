@@ -83,7 +83,7 @@ public record ProductorResponse(
         @Schema(description = "Código en el padrón: número de la federación, sigla de la "
                 + "central y correlativo. La letra A-H, si corresponde, se muestra junto "
                 + "al número de lote. Null mientras falte alguna parte base.",
-                example = "2-13J-78")
+                example = "213J78")
         String codigoPadron,
 
         @Schema(description = "Si al abrir la ficha se debe hacer su única revisión SIE.",
@@ -116,6 +116,12 @@ public record ProductorResponse(
 
         @Schema(description = "Fecha y hora de la última impresión confirmada.")
         LocalDateTime credencialUltimaImpresion,
+
+        @Schema(description = "Pendiente de una fase habilitada o de la siguiente fase.")
+        boolean faseImpresionPendiente,
+
+        @Schema(description = "La reserva pendiente corresponde a una reimpresión.")
+        boolean reimpresionFasePendiente,
 
         @Schema(description = "Si tiene foto, lote numerado y los datos personales mínimos para imprimir.")
         boolean credencialLista,
@@ -188,6 +194,8 @@ public record ProductorResponse(
                 p.getObservacionManual(),
                 p.getCredencialImpresiones(),
                 p.getCredencialUltimaImpresion(),
+                p.isFaseImpresionPendiente(),
+                p.isReimpresionFasePendiente(),
                 !faltaNumero && credencialLista(p, imagenes),
                 clasificacion,
                 faltaNumero,

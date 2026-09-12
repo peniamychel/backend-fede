@@ -13,6 +13,7 @@ import com.federa.backend.dto.RevisionSieProductorResponse;
 import com.federa.backend.service.CaraCredencial;
 import com.federa.backend.service.CredencialService;
 import com.federa.backend.service.DirectorioService;
+import com.federa.backend.service.FaseImpresionCarnetService;
 import com.federa.backend.service.ProductorService;
 import com.federa.backend.service.RevisionSieProductorService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,15 +44,18 @@ public class ProductorController {
     private final DirectorioService directorioService;
     private final CredencialService credencialService;
     private final RevisionSieProductorService revisionSieService;
+    private final FaseImpresionCarnetService faseImpresionCarnetService;
 
     public ProductorController(ProductorService productorService,
                                DirectorioService directorioService,
                                CredencialService credencialService,
-                               RevisionSieProductorService revisionSieService) {
+                               RevisionSieProductorService revisionSieService,
+                               FaseImpresionCarnetService faseImpresionCarnetService) {
         this.productorService = productorService;
         this.directorioService = directorioService;
         this.credencialService = credencialService;
         this.revisionSieService = revisionSieService;
+        this.faseImpresionCarnetService = faseImpresionCarnetService;
     }
 
     @GetMapping
@@ -120,6 +124,14 @@ public class ProductorController {
         return revisionSieService.confirmar(id, decision);
     }
 
+    @PostMapping("/{id}/revision-sie/aprobacion-manual")
+    @Operation(summary = "Aprueba manualmente los datos que SIE no pudo encontrar",
+            description = "Conserva la identidad actual y cierra únicamente el bloqueo SIE. "
+                    + "Las observaciones manuales independientes no se eliminan.")
+    public RevisionSieProductorResponse aprobarDatosActuales(@PathVariable Long id) {
+        return revisionSieService.aprobarDatosActuales(id);
+    }
+
     @GetMapping(value = "/{id}/credencial.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     @Operation(summary = "Descarga la credencial del productor",
             description = """
@@ -157,6 +169,13 @@ public class ProductorController {
     @Operation(summary = "Registra una impresión manual del anverso de la credencial")
     public ProductorResponse confirmarImpresionCredencial(@PathVariable Long id) {
         return credencialService.confirmarAnversoImpreso(id);
+    }
+
+    @PostMapping("/{id}/fase-impresion/reimpresion")
+    @Operation(summary = "Agrega el productor a la fase activa para reimprimir su carnet")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void agregarReimpresionAFase(@PathVariable Long id) {
+        faseImpresionCarnetService.agregarParaReimpresion(id);
     }
 
     static ResponseEntity<byte[]> comoAdjunto(CredencialService.Descarga descarga) {

@@ -35,7 +35,7 @@ public record VetoResponse(
                 example = "AB12CD34EF")
         String codigo,
 
-        @Schema(description = "Código en el padrón.", example = "2-IVI-1")
+        @Schema(description = "Código en el padrón.", example = "2IVI1")
         String codigoPadron,
 
         @Schema(example = "LIBERTAD")

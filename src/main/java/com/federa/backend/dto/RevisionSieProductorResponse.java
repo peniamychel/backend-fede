@@ -23,6 +23,7 @@ public record RevisionSieProductorResponse(
         CONSERVADA,
         CORREGIDA,
         CORREGIDA_MANUAL,
+        APROBADA_MANUAL,
         VERIFICADA,
         ACEPTADA_SIN_COINCIDENCIA,
         ACEPTADA_SIN_CEDULA,

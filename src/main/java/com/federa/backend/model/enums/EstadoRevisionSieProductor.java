@@ -5,6 +5,7 @@ public enum EstadoRevisionSieProductor {
     VERIFICADO(false),
     CORREGIDO_SIE(false),
     CORREGIDO_MANUAL(false),
+    APROBADO_MANUAL(false),
     DIFERENCIA_PENDIENTE(true),
     NO_ENCONTRADO(true),
     SIN_CEDULA(true);

@@ -79,7 +79,7 @@ public class Productor extends EntidadAuditable {
     /**
      * Número del productor dentro de su central, empezando en 1.
      * <p>
-     * Es la última parte del código del padrón —el "1" de {@code 2-IVI-1}— y lo
+     * Es la última parte del código del padrón —el "1" de {@code 2IVI1}— y lo
      * único que hace falta guardar: el número de la federación y la sigla de la
      * central se leen de ellas al armar el código. Guardar la cadena entera
      * dejaría códigos viejos el día que una central cambie de sigla, y hoy
@@ -192,6 +192,18 @@ public class Productor extends EntidadAuditable {
     @Column(name = "credencial_ultima_impresion", columnDefinition = "datetime")
     private LocalDateTime credencialUltimaImpresion;
 
+    /** Alta o edición reservada para incorporarse cuando se abra la siguiente fase. */
+    @Column(name = "fase_impresion_pendiente", nullable = false,
+            columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean faseImpresionPendiente = false;
+
+    /** La incorporación pendiente debe contabilizarse como reimpresión. */
+    @Column(name = "reimpresion_fase_pendiente", nullable = false,
+            columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean reimpresionFasePendiente = false;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "sindicato_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_productor_sindicato"))
@@ -246,6 +258,11 @@ public class Productor extends EntidadAuditable {
     @Builder.Default
     @OneToMany(mappedBy = "productor", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Veto> vetos = new ArrayList<>();
+
+    @JsonIgnore
+    @Builder.Default
+    @OneToMany(mappedBy = "productor", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ProductorFaseImpresion> fasesImpresion = new ArrayList<>();
 
     // Las fechas de alta y modificación ya no viven acá: las hereda de
     // EntidadAuditable, que las pone para todas las tablas por igual. Antes

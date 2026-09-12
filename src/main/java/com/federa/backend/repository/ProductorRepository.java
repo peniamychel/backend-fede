@@ -58,7 +58,7 @@ public interface ProductorRepository extends JpaRepository<Productor, Long> {
      * El texto se contrasta contra las cuatro formas en que se nombra a alguien
      * en la práctica: el nombre, el apellido, la cédula que trae en la mano, y
      * cualquiera de los dos códigos —el de la credencial, que es lo que dice el
-     * QR, y el del padrón ({@code 2-IVI-1}), que es lo que está impreso y lo
+     * QR, y el del padrón ({@code 2IVI1}), que es lo que está impreso y lo
      * que la gente lee en voz alta—.
      * <p>
      * El código del padrón no está guardado: se arma con el número de la
@@ -91,7 +91,7 @@ public interface ProductorRepository extends JpaRepository<Productor, Long> {
                         like :patronNombre
                    or p.ci like :patron
                    or upper(p.codigo) = upper(:texto)
-                   or upper(concat(f.numero, '-', c.abreviatura, '-', p.correlativo))
+                   or upper(concat(f.numero, c.abreviatura, p.correlativo))
                         = upper(:texto))
             """)
     Page<Productor> filtrar(@Param("sindicatoId") Long sindicatoId,

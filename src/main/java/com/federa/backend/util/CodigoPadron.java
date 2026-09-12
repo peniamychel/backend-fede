@@ -5,10 +5,10 @@ import com.federa.backend.model.Productor;
 
 /**
  * El código con el que se identifica a un productor dentro del padrón:
- * {@code 2-IVI-1}.
+ * {@code 2IVI1}.
  * <p>
- * Tres partes separadas por guion: el número de la federación, la sigla de la
- * central y el número del productor dentro de esa central. La letra A-H de
+ * Tres partes consecutivas, sin separadores: el número de la federación, el
+ * código membretado de la central y el número del productor dentro de esa central. La letra A-H de
  * una parcela compartida pertenece al número de lote, no a este código. Se arma al momento
  * de mostrarlo y no se guarda armado, así que el día que a una central le
  * pongan la sigla, todos sus productores muestran su código sin tocar una fila.
@@ -24,7 +24,7 @@ public final class CodigoPadron {
      * <p>
      * Falta alguna de las tres partes mientras la federación no tenga número o
      * la central no tenga sigla, que hoy es el caso de todas. Se devuelve null y
-     * no un código a medias como {@code "--1"}: media respuesta acá se
+     * no un código a medias: media respuesta acá se
      * imprimiría en una credencial y quedaría circulando en papel.
      */
     public static String de(Productor productor) {
@@ -42,7 +42,7 @@ public final class CodigoPadron {
         if (vacio(numeroFederacion) || vacio(abreviaturaCentral) || correlativo == null) {
             return null;
         }
-        return numeroFederacion + "-" + abreviaturaCentral + "-" + correlativo;
+        return numeroFederacion + abreviaturaCentral + correlativo;
     }
 
     private static boolean vacio(String valor) {

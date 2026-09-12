@@ -90,7 +90,7 @@ class LoteCodigoCompartidoTest {
         LoteResponse respuesta = LoteResponse.desde(lote, tenencia, null);
 
         assertThat(respuesta.codigo()).isEqualTo("22 A");
-        assertThat(respuesta.tenedor().codigoPadron()).isEqualTo("2-13J-78");
+        assertThat(respuesta.tenedor().codigoPadron()).isEqualTo("213J78");
         assertThat(respuesta.tenedor().letra()).isEqualTo("A");
     }
 

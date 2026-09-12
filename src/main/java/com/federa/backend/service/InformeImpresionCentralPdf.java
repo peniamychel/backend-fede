@@ -9,6 +9,7 @@ import com.lowagie.text.FontFactory;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Paragraph;
 import com.lowagie.text.Phrase;
+import com.lowagie.text.Rectangle;
 import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
@@ -18,6 +19,8 @@ import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Dibuja el informe imprimible del avance de una central. */
 @Component
@@ -29,18 +32,22 @@ public class InformeImpresionCentralPdf {
     private static final Color GRIS = new Color(100, 100, 100);
     private static final Font TITULO = fuente(16, Font.BOLD, VERDE);
     private static final Font SUBTITULO = fuente(9, Font.NORMAL, GRIS);
-    private static final Font RESUMEN = fuente(10, Font.BOLD, Color.BLACK);
-    private static final Font CABECERA = fuente(8, Font.BOLD, Color.BLACK);
+    private static final Font RESUMEN = fuente(9, Font.BOLD, Color.BLACK);
+    private static final Font CABECERA = fuente(7, Font.BOLD, Color.BLACK);
     private static final Font CELDA = fuente(8, Font.NORMAL, Color.BLACK);
 
     public byte[] generar(InformeImpresionCentral informe) {
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
-        Document documento = new Document(PageSize.LETTER.rotate(), 32, 32, 32, 32);
+        Document documento = new Document(
+                informe.avancesFase().size() > 1
+                        ? PageSize.LEGAL.rotate() : PageSize.LETTER.rotate(),
+                32, 32, 32, 32);
         try {
             PdfWriter.getInstance(documento, salida);
             documento.open();
 
-            Paragraph titulo = new Paragraph("AVANCE DE IMPRESIÓN DE CREDENCIALES", TITULO);
+            Paragraph titulo = new Paragraph(
+                    "AVANCE DE IMPRESIÓN DE CARNETS DE PRODUCTOR", TITULO);
             titulo.setAlignment(Element.ALIGN_CENTER);
             documento.add(titulo);
             Paragraph ubicacion = new Paragraph(
@@ -65,17 +72,28 @@ public class InformeImpresionCentralPdf {
     }
 
     private PdfPTable resumen(InformeImpresionCentral informe) throws DocumentException {
-        PdfPTable tabla = new PdfPTable(7);
+        PdfPTable tabla = new PdfPTable(3);
         tabla.setWidthPercentage(100);
-        tabla.setWidths(new float[]{1f, 1f, 1f, 1.15f, 1f, 1.15f, 1f});
+        tabla.setWidths(new float[]{1f, 1f, 1f});
         tabla.setSpacingAfter(16);
         resumen(tabla, "TOTAL", informe.total());
         resumen(tabla, "IMPRESOS", informe.impresos());
         resumen(tabla, "PENDIENTES", informe.pendientes());
-        resumen(tabla, "CON FOTO", informe.pendientesConFoto());
         resumen(tabla, "SIN FOTO", informe.sinFoto());
+        resumen(tabla, "OBSERVADOS", informe.observados());
+        resumen(tabla, "SISTEMA", informe.sistema());
+        resumen(tabla, "SIN SISTEMA", informe.sinSistema());
         resumen(tabla, "SIND. SIN SELLO", informe.sindicatosSinSello());
-        resumen(tabla, "AVANCE", formatoPorcentaje(informe.porcentajeAvance()));
+        for (InformeImpresionCentral.AvanceFase fase : informe.avancesFase()) {
+            resumen(tabla, "AVANCE FASE " + fase.numeroFase(),
+                    formatoPorcentaje(fase.porcentajeAvance()));
+        }
+        int celdas = 8 + informe.avancesFase().size();
+        while (celdas++ % 3 != 0) {
+            PdfPCell vacia = new PdfPCell();
+            vacia.setBorder(Rectangle.NO_BORDER);
+            tabla.addCell(vacia);
+        }
         return tabla;
     }
 
@@ -90,17 +108,26 @@ public class InformeImpresionCentralPdf {
     }
 
     private PdfPTable tabla(InformeImpresionCentral informe) throws DocumentException {
-        String[] titulos = {"SINDICATO", "SELLO", "TOTAL", "IMPRESOS", "PENDIENTES",
-                "CON FOTO", "SIN FOTO", "LISTOS", "AVANCE"};
-        PdfPTable tabla = new PdfPTable(titulos.length);
+        List<String> titulos = new ArrayList<>(List.of(
+                "SINDICATO", "SELLO", "TOTAL", "IMPRESOS", "PENDIENTES",
+                "SIN FOTO", "OBSERVADOS", "SISTEMA", "SIN SISTEMA"));
+        informe.avancesFase().forEach(fase ->
+                titulos.add("AVANCE FASE " + fase.numeroFase()));
+        PdfPTable tabla = new PdfPTable(titulos.size());
         tabla.setWidthPercentage(100);
-        tabla.setWidths(new float[]{3.35f, .85f, .7f, .8f, .95f, .85f, .8f, .7f, .85f});
+        float[] anchos = new float[titulos.size()];
+        float[] base = {3f, .75f, .65f, .75f, 1f, .75f, 1f, .75f, 1.1f};
+        System.arraycopy(base, 0, anchos, 0, base.length);
+        for (int indice = base.length; indice < anchos.length; indice++) {
+            anchos[indice] = 1.05f;
+        }
+        tabla.setWidths(anchos);
         tabla.setHeaderRows(1);
         for (String titulo : titulos) tabla.addCell(cabecera(titulo));
 
         if (informe.detalle().isEmpty()) {
             PdfPCell vacia = dato("Esta central todavía no tiene sindicatos.", Element.ALIGN_CENTER);
-            vacia.setColspan(titulos.length);
+            vacia.setColspan(titulos.size());
             vacia.setPadding(14);
             tabla.addCell(vacia);
             return tabla;
@@ -112,10 +139,14 @@ public class InformeImpresionCentralPdf {
             tabla.addCell(dato(fila.total(), Element.ALIGN_RIGHT));
             tabla.addCell(dato(fila.impresos(), Element.ALIGN_RIGHT));
             tabla.addCell(dato(fila.pendientes(), Element.ALIGN_RIGHT));
-            tabla.addCell(dato(fila.pendientesConFoto(), Element.ALIGN_RIGHT));
             tabla.addCell(dato(fila.sinFoto(), Element.ALIGN_RIGHT));
-            tabla.addCell(dato(fila.listosParaImprimir(), Element.ALIGN_RIGHT));
-            tabla.addCell(dato(formatoPorcentaje(fila.porcentajeAvance()), Element.ALIGN_RIGHT));
+            tabla.addCell(dato(fila.observados(), Element.ALIGN_RIGHT));
+            tabla.addCell(dato(fila.sistema(), Element.ALIGN_RIGHT));
+            tabla.addCell(dato(fila.sinSistema(), Element.ALIGN_RIGHT));
+            for (InformeImpresionCentral.AvanceFase fase : fila.avancesFase()) {
+                tabla.addCell(dato(formatoPorcentaje(fase.porcentajeAvance()),
+                        Element.ALIGN_RIGHT));
+            }
         }
         return tabla;
     }

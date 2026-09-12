@@ -86,7 +86,7 @@ class RevisionLoteTest {
         var completa = ProductorResponse.desde(p, foto);
         assertThat(completa.revisionLotePendiente()).isFalse();
         assertThat(completa.credencialLista()).isTrue();
-        assertThat(completa.codigoPadron()).isEqualTo("2-13J-100");
+        assertThat(completa.codigoPadron()).isEqualTo("213J100");
         // Completar lote no reemplaza los demás requisitos.
         assertThat(ProductorResponse.desde(p, Map.of()).credencialLista()).isFalse();
         p.getTenencias().get(0).terminar(LocalDate.now());

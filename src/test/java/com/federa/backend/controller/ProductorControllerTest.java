@@ -2,8 +2,10 @@ package com.federa.backend.controller;
 
 import com.federa.backend.dto.ProductorResponse;
 import com.federa.backend.dto.ObservacionProductorRequest;
+import com.federa.backend.dto.RevisionSieProductorResponse;
 import com.federa.backend.service.CredencialService;
 import com.federa.backend.service.DirectorioService;
+import com.federa.backend.service.FaseImpresionCarnetService;
 import com.federa.backend.service.ProductorService;
 import com.federa.backend.service.RevisionSieProductorService;
 import org.junit.jupiter.api.DisplayName;
@@ -38,7 +40,8 @@ class ProductorControllerTest {
                 mock(ProductorService.class),
                 mock(DirectorioService.class),
                 credenciales,
-                mock(RevisionSieProductorService.class));
+                mock(RevisionSieProductorService.class),
+                mock(FaseImpresionCarnetService.class));
 
         assertThat(controller.confirmarImpresionCredencial(812L)).isSameAs(esperado);
         verify(credenciales).confirmarAnversoImpreso(812L);
@@ -54,12 +57,29 @@ class ProductorControllerTest {
                 productores,
                 mock(DirectorioService.class),
                 mock(CredencialService.class),
-                mock(RevisionSieProductorService.class));
+                mock(RevisionSieProductorService.class),
+                mock(FaseImpresionCarnetService.class));
 
         assertThat(controller.observar(812L,
                 new ObservacionProductorRequest("REVISAR FOTO"))).isSameAs(esperado);
         assertThat(controller.quitarObservacion(812L)).isSameAs(esperado);
         verify(productores).observar(812L, "REVISAR FOTO");
         verify(productores).quitarObservacion(812L);
+    }
+
+    @Test
+    void permiteAprobarLosDatosCuandoSieNoEncuentraLaCedula() {
+        RevisionSieProductorService revisionSie = mock(RevisionSieProductorService.class);
+        RevisionSieProductorResponse esperado = mock(RevisionSieProductorResponse.class);
+        when(revisionSie.aprobarDatosActuales(812L)).thenReturn(esperado);
+        ProductorController controller = new ProductorController(
+                mock(ProductorService.class),
+                mock(DirectorioService.class),
+                mock(CredencialService.class),
+                revisionSie,
+                mock(FaseImpresionCarnetService.class));
+
+        assertThat(controller.aprobarDatosActuales(812L)).isSameAs(esperado);
+        verify(revisionSie).aprobarDatosActuales(812L);
     }
 }
