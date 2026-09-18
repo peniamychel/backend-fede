@@ -5,7 +5,6 @@ import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
-import com.lowagie.text.FontFactory;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Paragraph;
 import com.lowagie.text.Phrase;
@@ -26,16 +25,16 @@ import java.time.format.DateTimeFormatter;
 @Component
 public class PlanillaRecoleccionDirectorioPdf {
 
-    private static final Color VERDE = new Color(28, 104, 73);
-    private static final Color VERDE_CLARO = new Color(222, 239, 231);
+    private static final Color NEGRO = Color.BLACK;
+    private static final Color FONDO_GRIS = new Color(235, 235, 235);
     private static final Color GRIS = new Color(95, 95, 95);
     private static final float ANCHO_CUADROS = 500f;
     private static final float LADO_CUADRO = 250f;
-    private static final Font TITULO = fuente(14, Font.BOLD, VERDE);
+    private static final Font TITULO = fuente(14, Font.BOLD, NEGRO);
     private static final Font SUBTITULO = fuente(9, Font.NORMAL, GRIS);
-    private static final Font SECCION = fuente(11, Font.BOLD, VERDE);
-    private static final Font CABECERA = fuente(8, Font.BOLD, Color.BLACK);
-    private static final Font TEXTO = fuente(8, Font.NORMAL, Color.BLACK);
+    private static final Font SECCION = fuente(11, Font.BOLD, NEGRO);
+    private static final Font CABECERA = fuente(9, Font.BOLD, Color.BLACK);
+    private static final Font TEXTO = fuente(9, Font.NORMAL, Color.BLACK);
 
     public byte[] generar(PlanillaRecoleccionDirectorio planilla) {
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
@@ -163,8 +162,8 @@ public class PlanillaRecoleccionDirectorioPdf {
 
     private PdfPCell cabecera(String texto) {
         PdfPCell celda = new PdfPCell(new Phrase(texto, CABECERA));
-        celda.setBackgroundColor(VERDE_CLARO);
-        celda.setBorderColor(VERDE);
+        celda.setBackgroundColor(FONDO_GRIS);
+        celda.setBorderColor(NEGRO);
         celda.setPadding(6);
         celda.setHorizontalAlignment(Element.ALIGN_CENTER);
         return celda;
@@ -182,7 +181,7 @@ public class PlanillaRecoleccionDirectorioPdf {
     }
 
     private static Font fuente(float tamano, int estilo, Color color) {
-        return FontFactory.getFont(FontFactory.HELVETICA, tamano, estilo, color);
+        return FuentesInforme.fuente(tamano, estilo, color);
     }
 
     private static class NumeracionPaginas extends PdfPageEventHelper {

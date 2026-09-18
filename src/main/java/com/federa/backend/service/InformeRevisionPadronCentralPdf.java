@@ -1,7 +1,6 @@
 package com.federa.backend.service;
 
 import com.federa.backend.dto.InformePreImpresionCentral;
-import com.lowagie.text.Chunk;
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
@@ -28,21 +27,18 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
-/** PDF de revisión nominal separado y numerado por sindicato. */
+/** Lista por sindicato para revisar el padrón y anotar productores faltantes. */
 @Component
-public class InformePreImpresionCentralPdf {
+public class InformeRevisionPadronCentralPdf {
 
     private static final Color NEGRO = Color.BLACK;
-    private static final Color FONDO_GRIS = new Color(235, 235, 235);
     private static final Color GRIS = new Color(115, 115, 115);
-    private static final Color NEGRO_ALERTA = Color.BLACK;
+    private static final Color FONDO_GRIS = new Color(235, 235, 235);
     private static final Font TITULO = fuente(14, Font.BOLD, NEGRO);
-    private static final Font SUBTITULO = fuente(9f, Font.NORMAL, GRIS);
-    private static final Font SECCION = fuente(9, Font.BOLD, Color.BLACK);
-    private static final Font CABECERA = fuente(9f, Font.BOLD, Color.BLACK);
-    private static final Font CELDA = fuente(9f, Font.NORMAL, Color.BLACK);
-    private static final Font OBSERVADO = fuente(9f, Font.BOLD, NEGRO_ALERTA);
-    private static final Font PIE = fuente(8, Font.NORMAL, Color.BLACK);
+    private static final Font SECCION = fuente(9, Font.BOLD, NEGRO);
+    private static final Font SUBTITULO = fuente(9, Font.NORMAL, GRIS);
+    private static final Font CABECERA = fuente(9, Font.BOLD, NEGRO);
+    private static final Font CELDA = fuente(9, Font.NORMAL, NEGRO);
 
     public byte[] generar(InformePreImpresionCentral informe) {
         try {
@@ -51,14 +47,19 @@ public class InformePreImpresionCentralPdf {
             }
             List<byte[]> documentos = new ArrayList<>();
             for (InformePreImpresionCentral.SeccionSindicato seccion : informe.sindicatos()) {
-                // Se genera un documento por sindicato para reiniciar su paginación.
                 documentos.add(numerar(generarSindicato(informe, seccion)));
             }
             return combinar(documentos);
         } catch (DocumentException | IOException e) {
             throw new IllegalStateException(
-                    "No se pudo generar el informe pre-impresión de " + informe.central(), e);
+                    "No se pudo generar el informe de revisión del padrón de "
+                            + informe.central(), e);
         }
+    }
+
+    static int cantidadFilasEnBlanco(int productores) {
+        if (productores <= 0) return 0;
+        return (int) Math.ceil(productores * 0.20d);
     }
 
     private byte[] generarSinSindicatos(InformePreImpresionCentral informe)
@@ -83,7 +84,6 @@ public class InformePreImpresionCentralPdf {
         documento.open();
         encabezado(documento, informe, seccion);
         documento.add(tabla(seccion));
-        documento.add(constancia(seccion));
         documento.close();
         return salida.toByteArray();
     }
@@ -93,26 +93,31 @@ public class InformePreImpresionCentralPdf {
     }
 
     private void encabezado(
-            Document documento, InformePreImpresionCentral informe,
+            Document documento,
+            InformePreImpresionCentral informe,
             InformePreImpresionCentral.SeccionSindicato seccion)
             throws DocumentException {
         Paragraph titulo = new Paragraph(
-                "INFORME DE REVISIÓN DE DATOS DE IMPRESIÓN DE CARNET DE PRODUCTORES",
-                TITULO);
+                "INFORME DE REVISIÓN DEL PADRÓN DE PRODUCTORES", TITULO);
         titulo.setAlignment(Element.ALIGN_CENTER);
         documento.add(titulo);
+
         Paragraph organizacion = new Paragraph(
                 informe.federacion() + " · CENTRAL " + informe.central(), SECCION);
         organizacion.setAlignment(Element.ALIGN_CENTER);
         documento.add(organizacion);
         if (seccion != null) {
-            Paragraph sindicato = new Paragraph("SINDICATO: " + seccion.sindicato(), SECCION);
+            Paragraph sindicato = new Paragraph(
+                    "SINDICATO: " + seccion.sindicato(), SECCION);
             sindicato.setAlignment(Element.ALIGN_CENTER);
             documento.add(sindicato);
         }
+
+        int total = seccion == null ? informe.total() : seccion.productores().size();
+        int adicionales = cantidadFilasEnBlanco(total);
         Paragraph resumen = new Paragraph(
-                "Productores revisados: "
-                        + (seccion == null ? informe.total() : seccion.productores().size())
+                "Productores registrados: " + total
+                        + "   ·   Espacios para nuevos registros: " + adicionales
                         + "   ·   Generado: "
                         + LocalDateTime.now().format(
                         DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")), SUBTITULO);
@@ -124,11 +129,10 @@ public class InformePreImpresionCentralPdf {
     private PdfPTable tabla(InformePreImpresionCentral.SeccionSindicato seccion)
             throws DocumentException {
         String[] titulos = {"N°", "NOMBRES", "APELLIDOS", "C.I.", "N° LOTE",
-                "DATOS FALTANTES"};
+                "OBSERVACIONES"};
         PdfPTable tabla = new PdfPTable(titulos.length);
         tabla.setWidthPercentage(100);
-        tabla.setWidths(new float[]{.4f, 1.35f, 1.65f, .9f, .85f, 2.8f});
-        tabla.setSpacingAfter(12);
+        tabla.setWidths(new float[]{.4f, 1.45f, 1.7f, .9f, .8f, 2.25f});
 
         PdfPCell sindicato = new PdfPCell(new Phrase(
                 "SINDICATO: " + seccion.sindicato(), SECCION));
@@ -146,8 +150,19 @@ public class InformePreImpresionCentralPdf {
             tabla.addCell(dato(fila.apellidos(), Element.ALIGN_LEFT));
             tabla.addCell(dato(fila.ci(), Element.ALIGN_LEFT));
             tabla.addCell(dato(fila.lotes(), Element.ALIGN_CENTER));
-            tabla.addCell(datosFaltantes(fila));
+            tabla.addCell(dato(observaciones(fila), Element.ALIGN_LEFT));
         }
+
+        int adicionales = cantidadFilasEnBlanco(seccion.productores().size());
+        for (int i = 0; i < adicionales; i++) {
+            tabla.addCell(dato(numero++, Element.ALIGN_RIGHT));
+            for (int columna = 1; columna < titulos.length; columna++) {
+                PdfPCell vacia = dato("", Element.ALIGN_LEFT);
+                vacia.setMinimumHeight(19);
+                tabla.addCell(vacia);
+            }
+        }
+
         if (seccion.productores().isEmpty()) {
             PdfPCell vacia = dato("El sindicato no tiene productores.", Element.ALIGN_CENTER);
             vacia.setColspan(titulos.length);
@@ -157,19 +172,13 @@ public class InformePreImpresionCentralPdf {
         return tabla;
     }
 
-    private PdfPCell datosFaltantes(InformePreImpresionCentral.Fila fila) {
-        Phrase frase = new Phrase();
-        if (fila.observado()) {
-            frase.add(new Chunk("(OBSERVADO)", OBSERVADO));
-            if (!fila.datosFaltantes().isEmpty()) frase.add(new Chunk(" ", CELDA));
+    private String observaciones(InformePreImpresionCentral.Fila fila) {
+        List<String> observaciones = new ArrayList<>(2);
+        if (fila.observado()) observaciones.add("NOMBRE OBSERVADO");
+        if (fila.lotes() == null || fila.lotes().isBlank()) {
+            observaciones.add("SIN NÚMERO DE LOTE");
         }
-        List<String> visibles = fila.datosFaltantes().stream()
-                .filter(dato -> !"Observado".equalsIgnoreCase(dato))
-                .toList();
-        frase.add(new Chunk(String.join(", ", visibles), CELDA));
-        PdfPCell celda = new PdfPCell(frase);
-        configurarDato(celda, Element.ALIGN_LEFT);
-        return celda;
+        return String.join(" · ", observaciones);
     }
 
     private PdfPCell cabecera(String texto) {
@@ -184,58 +193,11 @@ public class InformePreImpresionCentralPdf {
     private PdfPCell dato(Object valor, int alineacion) {
         PdfPCell celda = new PdfPCell(new Phrase(
                 valor == null ? "" : String.valueOf(valor), CELDA));
-        configurarDato(celda, alineacion);
-        return celda;
-    }
-
-    private void configurarDato(PdfPCell celda, int alineacion) {
         celda.setBorderColor(new Color(170, 170, 170));
         celda.setBorderWidth(.4f);
         celda.setPadding(3);
         celda.setHorizontalAlignment(alineacion);
         celda.setVerticalAlignment(Element.ALIGN_MIDDLE);
-    }
-
-    private PdfPTable constancia(InformePreImpresionCentral.SeccionSindicato seccion)
-            throws DocumentException {
-        PdfPTable contenido = new PdfPTable(2);
-        contenido.setWidths(new float[]{1.4f, 1f});
-        PdfPCell titulo = sinBorde("CONSTANCIA DE ENTREGA DE INFORME", PIE);
-        titulo.setColspan(2);
-        contenido.addCell(titulo);
-        PdfPCell detalle = sinBorde(
-                "\nRecibí conforme el informe de revisión de "
-                        + seccion.productores().size() + " productor(es) del sindicato "
-                        + seccion.sindicato() + ".\n\n", PIE);
-        detalle.setColspan(2);
-        contenido.addCell(detalle);
-        contenido.addCell(sinBorde(
-                "Nombre de quien recibe: ______________________________\n\n"
-                        + "C.I.: ____________________\n\n"
-                        + "Firma: _________________________________    "
-                        + "Fecha: ____ / ____ / ______", PIE));
-        PdfPCell entrega = sinBorde(
-                "\n\nEntregado por: ______________________________", PIE);
-        entrega.setHorizontalAlignment(Element.ALIGN_RIGHT);
-        entrega.setVerticalAlignment(Element.ALIGN_BOTTOM);
-        contenido.addCell(entrega);
-
-        PdfPTable bloque = new PdfPTable(1);
-        bloque.setWidthPercentage(100);
-        bloque.setKeepTogether(true);
-        bloque.setSpacingBefore(5);
-        PdfPCell marco = new PdfPCell(contenido);
-        marco.setBorder(Rectangle.BOX);
-        marco.setBorderColor(new Color(150, 150, 150));
-        marco.setPadding(9);
-        bloque.addCell(marco);
-        return bloque;
-    }
-
-    private PdfPCell sinBorde(String texto, Font fuente) {
-        PdfPCell celda = new PdfPCell(new Phrase(texto, fuente));
-        celda.setBorder(Rectangle.NO_BORDER);
-        celda.setPadding(0);
         return celda;
     }
 
@@ -262,8 +224,8 @@ public class InformePreImpresionCentralPdf {
         return salida.toByteArray();
     }
 
-    /** Une los informes conservando la numeración independiente de cada sindicato. */
-    private byte[] combinar(List<byte[]> documentos) throws DocumentException, IOException {
+    private byte[] combinar(List<byte[]> documentos)
+            throws DocumentException, IOException {
         if (documentos.size() == 1) return documentos.get(0);
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
         Document documento = new Document();

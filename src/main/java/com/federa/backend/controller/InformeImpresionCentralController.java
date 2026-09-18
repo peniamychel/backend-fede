@@ -101,6 +101,15 @@ public class InformeImpresionCentralController {
         return pdf(descarga.nombreArchivo(), descarga.contenido());
     }
 
+    @GetMapping(value = "/{id}/credenciales/impresion/revision-padron.pdf",
+            produces = MediaType.APPLICATION_PDF_VALUE)
+    @Operation(summary = "Descarga la lista para revisar el padrón y anotar productores")
+    public ResponseEntity<byte[]> descargarRevisionPadron(@PathVariable Long id) {
+        InformePreImpresionCentralService.Descarga descarga =
+                servicioPreImpresion.descargarRevisionPadronPdf(id);
+        return pdf(descarga.nombreArchivo(), descarga.contenido());
+    }
+
     @GetMapping("/{id}/fases-impresion")
     @Operation(summary = "Consulta la fase activa y el historial de impresión")
     public EstadoFasesImpresionCentral fases(@PathVariable Long id) {

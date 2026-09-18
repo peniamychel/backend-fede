@@ -5,7 +5,6 @@ import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
-import com.lowagie.text.FontFactory;
 import com.lowagie.text.Image;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Phrase;
@@ -52,14 +51,14 @@ public class InformeSindicatoPdf {
     private static final Color GRIS_ENCABEZADO = new Color(224, 224, 224);
     private static final Color GRIS_TEXTO = new Color(90, 90, 90);
 
-    private static final Font TITULO = fuente(10.5f, Font.BOLD, Color.BLACK);
-    private static final Font ETIQUETA = fuente(9f, Font.BOLD, Color.BLACK);
-    private static final Font CAMPO = fuente(8.5f, Font.NORMAL, Color.BLACK);
-    private static final Font COLUMNA = fuente(7.5f, Font.BOLD, Color.BLACK);
-    private static final Font CELDA = fuente(7.5f, Font.NORMAL, Color.BLACK);
+    private static final Font TITULO = fuente(14, Font.BOLD, Color.BLACK);
+    private static final Font ETIQUETA = fuente(9, Font.BOLD, Color.BLACK);
+    private static final Font CAMPO = fuente(9f, Font.NORMAL, Color.BLACK);
+    private static final Font COLUMNA = fuente(9f, Font.BOLD, Color.BLACK);
+    private static final Font CELDA = fuente(9f, Font.NORMAL, Color.BLACK);
     private static final Font PIE = fuente(7.5f, Font.NORMAL, GRIS_TEXTO);
-    private static final Font ACTA = fuente(8.5f, Font.NORMAL, Color.BLACK);
-    private static final Font FIRMA = fuente(8f, Font.BOLD, Color.BLACK);
+    private static final Font ACTA = fuente(9f, Font.NORMAL, Color.BLACK);
+    private static final Font FIRMA = fuente(9, Font.BOLD, Color.BLACK);
 
     /**
      * Encabezados de la tabla y ancho de cada columna en puntos. Suman los 732
@@ -372,6 +371,6 @@ public class InformeSindicatoPdf {
     }
 
     private static Font fuente(float tamano, int estilo, Color color) {
-        return FontFactory.getFont(FontFactory.HELVETICA, tamano, estilo, color);
+        return FuentesInforme.fuente(tamano, estilo, color);
     }
 }

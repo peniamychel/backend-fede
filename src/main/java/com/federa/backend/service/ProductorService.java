@@ -99,8 +99,9 @@ public class ProductorService {
         boolean cambioDeIdentidad = cambioDeIdentidad(productor, request);
         String identidadAnterior = identidadDe(productor);
         aplicar(productor, request);
-        productor.setFaseImpresionPendiente(true);
-        productor.setReimpresionFasePendiente(productor.getCredencialImpresiones() > 0);
+        if (productor.getCredencialImpresiones() == 0) {
+            productor.setFaseImpresionPendiente(true);
+        }
         if (cambioDeIdentidad && productor.getRevisionSieEstado() != null) {
             marcarCorregidoManualmente(productor, identidadAnterior);
         }

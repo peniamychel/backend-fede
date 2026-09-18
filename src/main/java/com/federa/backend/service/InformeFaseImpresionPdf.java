@@ -5,7 +5,6 @@ import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
-import com.lowagie.text.FontFactory;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Paragraph;
 import com.lowagie.text.Phrase;
@@ -31,17 +30,17 @@ import java.util.List;
 @Component
 public class InformeFaseImpresionPdf {
 
-    private static final Color VERDE = new Color(28, 104, 73);
-    private static final Color VERDE_CLARO = new Color(222, 239, 231);
+    private static final Color NEGRO = Color.BLACK;
+    private static final Color FONDO_GRIS = new Color(235, 235, 235);
     private static final Color GRIS = new Color(100, 100, 100);
-    private static final Color ROJO = new Color(180, 35, 35);
-    private static final Font TITULO = fuente(13, Font.BOLD, VERDE);
-    private static final Font SUBTITULO = fuente(8.5f, Font.NORMAL, GRIS);
+    private static final Color NEGRO_ALERTA = Color.BLACK;
+    private static final Font TITULO = fuente(14, Font.BOLD, NEGRO);
+    private static final Font SUBTITULO = fuente(9f, Font.NORMAL, GRIS);
     private static final Font SECCION = fuente(9, Font.BOLD, Color.BLACK);
-    private static final Font CABECERA = fuente(6.8f, Font.BOLD, Color.BLACK);
-    private static final Font CELDA = fuente(6.8f, Font.NORMAL, Color.BLACK);
-    private static final Font ALERTA = fuente(6.8f, Font.BOLD, ROJO);
-    private static final Font FIRMA = fuente(8, Font.NORMAL, Color.BLACK);
+    private static final Font CABECERA = fuente(9f, Font.BOLD, Color.BLACK);
+    private static final Font CELDA = fuente(9f, Font.NORMAL, Color.BLACK);
+    private static final Font ALERTA = fuente(9f, Font.BOLD, NEGRO_ALERTA);
+    private static final Font FIRMA = fuente(9, Font.NORMAL, Color.BLACK);
 
     public byte[] generar(InformeFaseImpresion informe) {
         try {
@@ -125,10 +124,6 @@ public class InformeFaseImpresionPdf {
 
     private void sindicato(Document documento, InformeFaseImpresion.SeccionSindicato seccion)
             throws DocumentException {
-        Paragraph impresos = new Paragraph(
-                "CARNETS IMPRESOS EN LA FASE (" + seccion.impresos().size() + ")", SECCION);
-        impresos.setSpacingAfter(4);
-        documento.add(impresos);
         documento.add(tabla(seccion.sindicato(), seccion.impresos(), false));
         if (!seccion.impresos().isEmpty()) documento.add(constancia(seccion));
 
@@ -150,7 +145,7 @@ public class InformeFaseImpresionPdf {
         tabla.setWidths(new float[]{.4f, 1.3f, 1.6f, .85f, .8f, 2.8f});
         PdfPCell nombre = new PdfPCell(new Phrase("SINDICATO: " + sindicato, SECCION));
         nombre.setColspan(titulos.length);
-        nombre.setBorderColor(VERDE);
+        nombre.setBorderColor(NEGRO);
         nombre.setPadding(4);
         tabla.addCell(nombre);
         for (String titulo : titulos) tabla.addCell(cabecera(titulo));
@@ -183,8 +178,8 @@ public class InformeFaseImpresionPdf {
 
     private PdfPCell cabecera(String texto) {
         PdfPCell celda = new PdfPCell(new Phrase(texto, CABECERA));
-        celda.setBackgroundColor(VERDE_CLARO);
-        celda.setBorderColor(VERDE);
+        celda.setBackgroundColor(FONDO_GRIS);
+        celda.setBorderColor(NEGRO);
         celda.setPadding(4);
         celda.setHorizontalAlignment(Element.ALIGN_CENTER);
         return celda;
@@ -225,8 +220,7 @@ public class InformeFaseImpresionPdf {
         PdfReader lector = new PdfReader(original);
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
         PdfStamper sello = new PdfStamper(lector, salida);
-        BaseFont fuente = BaseFont.createFont(
-                BaseFont.HELVETICA, BaseFont.WINANSI, BaseFont.NOT_EMBEDDED);
+        BaseFont fuente = FuentesInforme.regular();
         int total = lector.getNumberOfPages();
         for (int pagina = 1; pagina <= total; pagina++) {
             Rectangle hoja = lector.getPageSizeWithRotation(pagina);
@@ -265,6 +259,6 @@ public class InformeFaseImpresionPdf {
     }
 
     private static Font fuente(float tamano, int estilo, Color color) {
-        return FontFactory.getFont(FontFactory.HELVETICA, tamano, estilo, color);
+        return FuentesInforme.fuente(tamano, estilo, color);
     }
 }

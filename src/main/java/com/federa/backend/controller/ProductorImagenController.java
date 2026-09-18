@@ -12,7 +12,10 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -38,6 +41,20 @@ public class ProductorImagenController {
                     + "esa URL, que la sirve el controlador de archivos.")
     public List<ImagenResponse> listar(@PathVariable Long productorId) {
         return imagenService.listar(productorId);
+    }
+
+    @GetMapping("/descarga")
+    @Operation(summary = "Descarga la fotografía grande del productor")
+    public ResponseEntity<byte[]> descargar(@PathVariable Long productorId) {
+        ImagenProductorService.ArchivoDescarga archivo =
+                imagenService.descargarOriginal(productorId);
+        ContentDisposition disposicion = ContentDisposition.attachment()
+                .filename(archivo.nombreArchivo(), java.nio.charset.StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposicion.toString())
+                .contentType(MediaType.parseMediaType(archivo.tipoMime()))
+                .body(archivo.contenido());
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

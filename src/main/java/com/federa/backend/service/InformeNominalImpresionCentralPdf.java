@@ -5,7 +5,6 @@ import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
-import com.lowagie.text.FontFactory;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Paragraph;
 import com.lowagie.text.Phrase;
@@ -34,12 +33,12 @@ public class InformeNominalImpresionCentralPdf {
 
     private static final Color GRIS_LINEA = new Color(150, 150, 150);
     private static final Color GRIS_ENCABEZADO = new Color(224, 224, 224);
-    private static final Font TITULO = fuente(13, Font.BOLD, Color.BLACK);
+    private static final Font TITULO = fuente(14, Font.BOLD, Color.BLACK);
     private static final Font SUBTITULO = fuente(9, Font.NORMAL, new Color(80, 80, 80));
     private static final Font SECCION = fuente(10, Font.BOLD, Color.BLACK);
-    private static final Font CABECERA = fuente(7.2f, Font.BOLD, Color.BLACK);
-    private static final Font CELDA = fuente(7.2f, Font.NORMAL, Color.BLACK);
-    private static final Font FIRMA = fuente(8.5f, Font.NORMAL, Color.BLACK);
+    private static final Font CABECERA = fuente(9f, Font.BOLD, Color.BLACK);
+    private static final Font CELDA = fuente(9f, Font.NORMAL, Color.BLACK);
+    private static final Font FIRMA = fuente(9f, Font.NORMAL, Color.BLACK);
     private static final Font PIE_PAGINA = fuente(8, Font.NORMAL, new Color(90, 90, 90));
 
     public byte[] generar(InformeNominalImpresionCentral informe) {
@@ -262,8 +261,7 @@ public class InformeNominalImpresionCentralPdf {
         PdfReader lector = new PdfReader(original);
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
         PdfStamper sello = new PdfStamper(lector, salida);
-        BaseFont fuentePie = BaseFont.createFont(
-                BaseFont.HELVETICA, BaseFont.WINANSI, BaseFont.NOT_EMBEDDED);
+        BaseFont fuentePie = FuentesInforme.regular();
         int total = lector.getNumberOfPages();
         for (int pagina = 1; pagina <= total; pagina++) {
             Rectangle hoja = lector.getPageSizeWithRotation(pagina);
@@ -305,6 +303,6 @@ public class InformeNominalImpresionCentralPdf {
     }
 
     private static Font fuente(float tamano, int estilo, Color color) {
-        return FontFactory.getFont(FontFactory.HELVETICA, tamano, estilo, color);
+        return FuentesInforme.fuente(tamano, estilo, color);
     }
 }

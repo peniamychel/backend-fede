@@ -760,9 +760,7 @@ public class CredencialService {
         exigirSinVeto(productor);
         exigirSinObservacionManual(productor);
         exigirRevisionSieResuelta(productor);
-        FaseImpresionCarnet fase = faseImpresionService.prepararSeleccion(
-                productor.getSindicato().getId(), List.of(productor), true);
-        faseImpresionService.registrarImpresion(fase, productor);
+        faseImpresionService.registrarImpresionManual(productor);
         productor.setCredencialImpresiones(productor.getCredencialImpresiones() + 1);
         productor.setCredencialUltimaImpresion(LocalDateTime.now());
         productorRepository.flush();

@@ -77,6 +77,24 @@ public class ImagenProductorService {
         return almacen.leer(imagen.getClave());
     }
 
+    /** Fotografía grande lista para descargar desde la ficha del productor. */
+    public ArchivoDescarga descargarOriginal(Long productorId) {
+        ImagenProductor imagen = imagenRepository
+                .findByProductorIdAndTipo(productorId, TipoImagen.ORIGINAL)
+                .orElseThrow(() -> new RecursoNoEncontradoException(
+                        "fotografía del productor", productorId));
+        String nombre = Textos.paraNombreDeArchivo(
+                imagen.getProductor().getNombreCompleto(), 80);
+        if (nombre == null || nombre.isBlank()) nombre = "productor-" + productorId;
+        String extension = "image/png".equalsIgnoreCase(imagen.getTipoMime())
+                ? ".png" : ".jpg";
+        return new ArchivoDescarga(
+                almacen.leer(imagen.getClave()), imagen.getTipoMime(),
+                "fotografia-" + nombre + extension);
+    }
+
+    public record ArchivoDescarga(byte[] contenido, String tipoMime, String nombreArchivo) {}
+
     /**
      * Guarda la foto de un productor a partir de un único archivo.
      * <p>

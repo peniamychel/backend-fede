@@ -178,6 +178,13 @@ public class ProductorController {
         faseImpresionCarnetService.agregarParaReimpresion(id);
     }
 
+    @DeleteMapping("/{id}/fase-impresion/reimpresion")
+    @Operation(summary = "Cancela una reimpresión pendiente conservando las impresiones anteriores")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cancelarReimpresion(@PathVariable Long id) {
+        faseImpresionCarnetService.cancelarReimpresion(id);
+    }
+
     static ResponseEntity<byte[]> comoAdjunto(CredencialService.Descarga descarga) {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,

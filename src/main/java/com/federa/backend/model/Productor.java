@@ -188,6 +188,15 @@ public class Productor extends EntidadAuditable {
     @Builder.Default
     private int credencialImpresiones = 0;
 
+    /** Anversos manuales que se incorporarán al informe de la próxima fase. */
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    @Builder.Default
+    private int impresionesManualesSinFase = 0;
+
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean reimpresionManualSinFase = false;
+
     /** Última vez que se confirmó el envío de su anverso a la impresora. */
     @Column(name = "credencial_ultima_impresion", columnDefinition = "datetime")
     private LocalDateTime credencialUltimaImpresion;

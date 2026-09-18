@@ -3,6 +3,7 @@ package com.federa.backend.service;
 import com.federa.backend.almacen.AlmacenObjetos;
 import com.federa.backend.model.ImagenProductor;
 import com.federa.backend.model.Productor;
+import com.federa.backend.model.enums.TipoImagen;
 import com.federa.backend.repository.ImagenProductorRepository;
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +16,36 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class ImagenProductorActividadTest {
+
+    @Test
+    void descargaLaFotografiaGrandeComoPngConNombreReconocible() {
+        ImagenProductorRepository imagenes = mock(ImagenProductorRepository.class);
+        AlmacenObjetos almacen = mock(AlmacenObjetos.class);
+        ImagenProductorService servicio = new ImagenProductorService(
+                imagenes, mock(ProductorService.class),
+                mock(ProcesadorImagenes.class), almacen);
+        Productor productor = new Productor();
+        productor.setId(18L);
+        productor.setNombres("MARÍA");
+        productor.setApellidos("PÉREZ");
+        ImagenProductor original = ImagenProductor.builder()
+                .productor(productor)
+                .tipo(TipoImagen.ORIGINAL)
+                .tipoMime("image/png")
+                .clave("originales/foto.png")
+                .build();
+        when(imagenes.findByProductorIdAndTipo(18L, TipoImagen.ORIGINAL))
+                .thenReturn(Optional.of(original));
+        when(almacen.leer("originales/foto.png")).thenReturn(new byte[]{1, 2, 3});
+
+        ImagenProductorService.ArchivoDescarga descarga =
+                servicio.descargarOriginal(18L);
+
+        assertThat(descarga.contenido()).containsExactly(1, 2, 3);
+        assertThat(descarga.tipoMime()).isEqualTo("image/png");
+        assertThat(descarga.nombreArchivo())
+                .startsWith("fotografia-").endsWith(".png");
+    }
 
     @Test
     void subirLaFotoMarcaAlProductorComoModificadoRecientemente() {

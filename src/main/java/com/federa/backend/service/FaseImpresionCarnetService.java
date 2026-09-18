@@ -91,6 +91,8 @@ public class FaseImpresionCarnetService {
         } else if (anterior.isPresent()) {
             for (ProductorFaseImpresion pendiente : participanteRepository
                     .findByFaseIdAndPendienteTrue(anterior.get().getId())) {
+                if (pendiente.isReimpresion()
+                        && !pendiente.getProductor().isReimpresionFasePendiente()) continue;
                 incluidos.put(pendiente.getProductor().getId(), new Incorporacion(
                         pendiente.getProductor(), pendiente.isReimpresion(), true, 0));
             }
@@ -106,6 +108,16 @@ public class FaseImpresionCarnetService {
         }
 
         List<ProductorFaseImpresion> participantes = new ArrayList<>(incluidos.size());
+        for (Productor productor : productores) {
+            if (productor.getImpresionesManualesSinFase() > 0) {
+                incluidos.put(productor.getId(), new Incorporacion(productor,
+                        productor.isReimpresionManualSinFase(),
+                        productor.isReimpresionFasePendiente(),
+                        productor.getImpresionesManualesSinFase()));
+                productor.setImpresionesManualesSinFase(0);
+                productor.setReimpresionManualSinFase(false);
+            }
+        }
         for (Incorporacion incorporacion : incluidos.values()) {
             participantes.add(new ProductorFaseImpresion(
                     fase, incorporacion.productor(), ahora, incorporacion.pendiente(),
@@ -152,8 +164,13 @@ public class FaseImpresionCarnetService {
             throw new ReglaNegocioException(
                     "El productor todavía no tiene un carnet impreso para reimprimir");
         }
-        FaseImpresionCarnet fase = exigirActiva(
-                productor.getSindicato().getCentral().getId());
+        productor.setFaseImpresionPendiente(true);
+        productor.setReimpresionFasePendiente(true);
+        FaseImpresionCarnet fase = faseActiva(
+                productor.getSindicato().getCentral().getId()).orElse(null);
+        // La próxima apertura incorpora las marcas pendientes sin alterar
+        // los participantes ni los informes de las fases cerradas.
+        if (fase == null) return null;
         ProductorFaseImpresion participante = participanteRepository
                 .findByFaseIdAndProductorId(fase.getId(), productorId)
                 .orElseGet(() -> new ProductorFaseImpresion(
@@ -163,6 +180,43 @@ public class FaseImpresionCarnetService {
         productor.setFaseImpresionPendiente(true);
         productor.setReimpresionFasePendiente(true);
         return participanteRepository.save(participante);
+    }
+
+    @Transactional
+    public void cancelarReimpresion(Long productorId) {
+        Productor productor = productorRepository.findById(productorId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("productor", productorId));
+        if (!productor.isReimpresionFasePendiente()) return;
+        productor.setReimpresionFasePendiente(false);
+        productor.setFaseImpresionPendiente(false);
+        faseActiva(productor.getSindicato().getCentral().getId()).ifPresent(fase ->
+                participanteRepository.findByFaseIdAndProductorId(fase.getId(), productorId)
+                        .ifPresent(participante -> {
+                            if (!participante.isReimpresion() || !participante.isPendiente()) return;
+                            if (participante.getImpresionesEnFase() == 0) {
+                                participanteRepository.delete(participante);
+                            } else {
+                                participante.setPendiente(false);
+                            }
+                        }));
+    }
+
+    @Transactional
+    public void registrarImpresionManual(Productor productor) {
+        faseActiva(productor.getSindicato().getCentral().getId()).ifPresent(fase ->
+                participanteRepository.findByFaseIdAndProductorId(fase.getId(), productor.getId())
+                        .ifPresent(participante -> {
+                            if (participante.getImpresionesEnFase() == 0) {
+                                participanteRepository.delete(participante);
+                            } else {
+                                participante.setPendiente(false);
+                            }
+                        }));
+        productor.setImpresionesManualesSinFase(productor.getImpresionesManualesSinFase() + 1);
+        productor.setReimpresionManualSinFase(productor.isReimpresionManualSinFase()
+                || productor.getCredencialImpresiones() > 0);
+        productor.setFaseImpresionPendiente(false);
+        productor.setReimpresionFasePendiente(false);
     }
 
     /** Valida la fase y prepara dentro de ella las reimpresiones selectivas. */

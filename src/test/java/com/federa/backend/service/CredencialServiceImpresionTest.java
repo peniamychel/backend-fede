@@ -161,6 +161,17 @@ class CredencialServiceImpresionTest {
     }
 
     @Test
+    void impresionManualCuentaSinExigirFaseActiva() {
+        sindicato.setCentral(com.federa.backend.model.Central.builder()
+                .id(5L).nombre("CENTRAL").build());
+        when(productorRepository.findById(81L)).thenReturn(Optional.of(productor));
+        servicio.confirmarAnversoImpreso(81L);
+        assertThat(productor.getCredencialImpresiones()).isEqualTo(3);
+        verify(faseImpresionCarnetService).registrarImpresionManual(productor);
+        org.mockito.Mockito.verifyNoMoreInteractions(faseImpresionCarnetService);
+    }
+
+    @Test
     void deshabilitadoNoPuedeContabilizarseNiConElEndpointManual() {
         productor.setEstado(false);
         when(productorRepository.findById(81L)).thenReturn(Optional.of(productor));

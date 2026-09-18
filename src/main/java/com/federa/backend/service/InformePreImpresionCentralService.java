@@ -21,16 +21,19 @@ public class InformePreImpresionCentralService {
     private final SindicatoRepository sindicatoRepository;
     private final CredencialService credencialService;
     private final InformePreImpresionCentralPdf generadorPdf;
+    private final InformeRevisionPadronCentralPdf generadorRevisionPadronPdf;
 
     public InformePreImpresionCentralService(
             CentralRepository centralRepository,
             SindicatoRepository sindicatoRepository,
             CredencialService credencialService,
-            InformePreImpresionCentralPdf generadorPdf) {
+            InformePreImpresionCentralPdf generadorPdf,
+            InformeRevisionPadronCentralPdf generadorRevisionPadronPdf) {
         this.centralRepository = centralRepository;
         this.sindicatoRepository = sindicatoRepository;
         this.credencialService = credencialService;
         this.generadorPdf = generadorPdf;
+        this.generadorRevisionPadronPdf = generadorRevisionPadronPdf;
     }
 
     public InformePreImpresionCentral obtener(Long centralId) {
@@ -51,6 +54,13 @@ public class InformePreImpresionCentralService {
         String archivo = "informe-pre-impresion-"
                 + Textos.paraNombreDeArchivo(informe.central(), 50) + ".pdf";
         return new Descarga(archivo, generadorPdf.generar(informe));
+    }
+
+    public Descarga descargarRevisionPadronPdf(Long centralId) {
+        InformePreImpresionCentral informe = obtener(centralId);
+        String archivo = "revision-padron-"
+                + Textos.paraNombreDeArchivo(informe.central(), 50) + ".pdf";
+        return new Descarga(archivo, generadorRevisionPadronPdf.generar(informe));
     }
 
     private InformePreImpresionCentral.SeccionSindicato seccion(Sindicato sindicato) {

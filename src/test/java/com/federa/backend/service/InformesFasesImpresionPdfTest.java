@@ -16,6 +16,39 @@ import static org.assertj.core.api.Assertions.assertThat;
 class InformesFasesImpresionPdfTest {
 
     @Test
+    void revisionPadronSoloMuestraObservacionesSolicitadasYAumentaVeintePorCiento()
+            throws Exception {
+        InformePreImpresionCentral informe = new InformePreImpresionCentral(
+                13L, "13 DE JUNIO", "FEDERACIÓN CARRASCO TROPICAL", 2,
+                List.of(new InformePreImpresionCentral.SeccionSindicato(
+                        21L, "1RO DE MAYO", List.of(
+                        new InformePreImpresionCentral.Fila(
+                                1L, "MARÍA", "PÉREZ", "123456", "22 A",
+                                true, List.of("Fotografía", "Cédula")),
+                        new InformePreImpresionCentral.Fila(
+                                2L, "JUAN", "MAMANI", "654321", "",
+                                false, List.of("Fotografía", "Número de lote"))))));
+
+        byte[] pdf = new InformeRevisionPadronCentralPdf().generar(informe);
+        String texto = texto(pdf);
+
+        assertThat(texto)
+                .contains("INFORME DE REVISIÓN DEL PADRÓN DE PRODUCTORES")
+                .contains("Espacios para nuevos registros: 1")
+                .contains("NOMBRE OBSERVADO")
+                .contains("SIN NÚMERO DE LOTE")
+                .doesNotContain("Fotografía")
+                .doesNotContain("Cédula");
+        assertThat(InformeRevisionPadronCentralPdf.cantidadFilasEnBlanco(100))
+                .isEqualTo(20);
+        assertThat(InformeRevisionPadronCentralPdf.cantidadFilasEnBlanco(6))
+                .isEqualTo(2);
+        assertThat(InformeRevisionPadronCentralPdf.cantidadFilasEnBlanco(0))
+                .isZero();
+        guardarMuestra("informe-revision-padron-muestra.pdf", pdf);
+    }
+
+    @Test
     void preImpresionEsUnSoloListadoSinEstadoDeCarnet() throws Exception {
         InformePreImpresionCentral informe = new InformePreImpresionCentral(
                 13L, "13 DE JUNIO", "FEDERACIÓN CARRASCO TROPICAL", 3,
@@ -91,11 +124,11 @@ class InformesFasesImpresionPdfTest {
 
         assertThat(texto)
                 .contains("FASE 2 DE IMPRESIÓN")
-                .contains("CARNETS IMPRESOS EN LA FASE")
                 .contains("PENDIENTES POR DATOS U OBSERVACIONES")
                 .contains("CARNET REIMPRESO")
                 .contains("OBSERVADO: REVISAR CÉDULA")
-                .doesNotContain("CLASIFICACIÓN");
+                .doesNotContain("CLASIFICACIÓN")
+                .doesNotContain("CARNETS IMPRESOS EN LA FASE");
         PdfReader lector = new PdfReader(pdf);
         try {
             assertThat(lector.getNumberOfPages()).isEqualTo(2);

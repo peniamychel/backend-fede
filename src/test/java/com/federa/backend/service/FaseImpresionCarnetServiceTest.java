@@ -46,12 +46,76 @@ class FaseImpresionCarnetServiceTest {
     }
 
     @Test
+    void reservaReimpresionSinFaseActivaSinModificarHistorial() {
+        Central central = Central.builder().id(5L).build();
+        Sindicato sindicato = Sindicato.builder().id(8L).central(central).build();
+        Productor productor = Productor.builder().id(1L).sindicato(sindicato)
+                .credencialImpresiones(2).build();
+        when(productorRepository.findById(1L)).thenReturn(Optional.of(productor));
+        when(faseRepository.findFirstByCentralIdAndEstadoOrderByNumeroDesc(
+                5L, EstadoFaseImpresionCarnet.ABIERTA)).thenReturn(Optional.empty());
+
+        servicio.agregarParaReimpresion(1L);
+
+        assertThat(productor.isFaseImpresionPendiente()).isTrue();
+        assertThat(productor.isReimpresionFasePendiente()).isTrue();
+        assertThat(productor.getCredencialImpresiones()).isEqualTo(2);
+        org.mockito.Mockito.verifyNoInteractions(participanteRepository);
+    }
+
+    @Test
+    void cancelaReservaSinFaseYConservaConteo() {
+        Central central = Central.builder().id(5L).build();
+        Productor productor = Productor.builder().id(1L)
+                .sindicato(Sindicato.builder().central(central).build())
+                .credencialImpresiones(2).faseImpresionPendiente(true)
+                .reimpresionFasePendiente(true).build();
+        when(productorRepository.findById(1L)).thenReturn(Optional.of(productor));
+        servicio.cancelarReimpresion(1L);
+        assertThat(productor.isFaseImpresionPendiente()).isFalse();
+        assertThat(productor.isReimpresionFasePendiente()).isFalse();
+        assertThat(productor.getCredencialImpresiones()).isEqualTo(2);
+        org.mockito.Mockito.verifyNoInteractions(participanteRepository);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {0, 2})
+    void cancelaEnFaseAbiertaConservandoImpresionesReales(int impresiones) {
+        Central central = Central.builder().id(5L).build();
+        Productor productor = Productor.builder().id(1L)
+                .sindicato(Sindicato.builder().central(central).build())
+                .credencialImpresiones(3).faseImpresionPendiente(true)
+                .reimpresionFasePendiente(true).build();
+        FaseImpresionCarnet fase = new FaseImpresionCarnet();
+        fase.setId(11L);
+        ProductorFaseImpresion participante = new ProductorFaseImpresion(
+                fase, productor, java.time.LocalDateTime.now(), true, true, impresiones);
+        when(productorRepository.findById(1L)).thenReturn(Optional.of(productor));
+        when(faseRepository.findFirstByCentralIdAndEstadoOrderByNumeroDesc(
+                5L, EstadoFaseImpresionCarnet.ABIERTA)).thenReturn(Optional.of(fase));
+        when(participanteRepository.findByFaseIdAndProductorId(11L, 1L))
+                .thenReturn(Optional.of(participante));
+        servicio.cancelarReimpresion(1L);
+        if (impresiones == 0) {
+            org.mockito.Mockito.verify(participanteRepository).delete(participante);
+        } else {
+            assertThat(participante.isPendiente()).isFalse();
+            assertThat(participante.getImpresionesEnFase()).isEqualTo(impresiones);
+            org.mockito.Mockito.verify(participanteRepository, org.mockito.Mockito.never())
+                    .delete(any());
+        }
+        assertThat(productor.getCredencialImpresiones()).isEqualTo(3);
+        assertThat(productor.isReimpresionFasePendiente()).isFalse();
+    }
+
+    @Test
     void primeraFaseIncorporaTodoElPadronYConservaElAvanceExistente() {
         Central central = Central.builder().id(5L).nombre("IVIRGARZAMA").build();
         Sindicato sindicato = Sindicato.builder().id(8L).nombre("LIBERTAD")
                 .central(central).build();
         Productor impreso = Productor.builder().id(1L).nombres("MARÍA")
-                .sindicato(sindicato).credencialImpresiones(2).build();
+                .sindicato(sindicato).credencialImpresiones(2)
+                .impresionesManualesSinFase(1).reimpresionManualSinFase(true).build();
         Productor pendiente = Productor.builder().id(2L).nombres("JUAN")
                 .sindicato(sindicato).credencialImpresiones(0).build();
         List<ProductorFaseImpresion> guardados = new ArrayList<>();
@@ -81,6 +145,11 @@ class FaseImpresionCarnetServiceTest {
                 .thenAnswer(invocacion -> guardados);
 
         EstadoFasesImpresionCentral estado = servicio.abrir(5L);
+
+        assertThat(guardados.get(0).isReimpresion()).isTrue();
+        assertThat(guardados.get(0).getImpresionesEnFase()).isEqualTo(1);
+        assertThat(impreso.getImpresionesManualesSinFase()).isZero();
+        assertThat(impreso.getCredencialImpresiones()).isEqualTo(2);
 
         assertThat(estado.faseActiva()).isNotNull();
         assertThat(estado.faseActiva().numero()).isEqualTo(1);
