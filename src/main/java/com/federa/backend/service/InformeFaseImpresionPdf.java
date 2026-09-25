@@ -33,13 +33,12 @@ public class InformeFaseImpresionPdf {
     private static final Color NEGRO = Color.BLACK;
     private static final Color FONDO_GRIS = new Color(235, 235, 235);
     private static final Color GRIS = new Color(100, 100, 100);
-    private static final Color NEGRO_ALERTA = Color.BLACK;
     private static final Font TITULO = fuente(14, Font.BOLD, NEGRO);
     private static final Font SUBTITULO = fuente(9f, Font.NORMAL, GRIS);
     private static final Font SECCION = fuente(9, Font.BOLD, Color.BLACK);
     private static final Font CABECERA = fuente(9f, Font.BOLD, Color.BLACK);
     private static final Font CELDA = fuente(9f, Font.NORMAL, Color.BLACK);
-    private static final Font ALERTA = fuente(9f, Font.BOLD, NEGRO_ALERTA);
+    private static final Font FASE_DESTACADA = fuente(18f, Font.BOLD, Color.BLACK);
     private static final Font FIRMA = fuente(9, Font.NORMAL, Color.BLACK);
 
     public byte[] generar(InformeFaseImpresion informe) {
@@ -75,11 +74,16 @@ public class InformeFaseImpresionPdf {
             InformeFaseImpresion.SeccionSindicato seccion)
             throws DocumentException {
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
-        Document documento = nuevoDocumento();
-        PdfWriter.getInstance(documento, salida);
+        PdfPTable bloqueConstancia = constancia(seccion);
+        bloqueConstancia.setTotalWidth(PageSize.LETTER.getWidth() - 60);
+        bloqueConstancia.calculateHeights(true);
+        float margenInferior = 50 + bloqueConstancia.getTotalHeight() + 15;
+        Document documento = new Document(PageSize.LETTER, 30, 30, 28, margenInferior);
+        PdfWriter escritor = PdfWriter.getInstance(documento, salida);
         documento.open();
         encabezado(documento, informe, seccion);
-        sindicato(documento, seccion);
+        documento.add(leyendaObservaciones(informe.numeroFase()));
+        sindicato(documento, escritor, informe, seccion, bloqueConstancia);
         documento.close();
         return salida.toByteArray();
     }
@@ -110,40 +114,73 @@ public class InformeFaseImpresionPdf {
         String periodo = "Habilitada: " + informe.abiertaEn().format(formato)
                 + (informe.cerradaEn() == null ? " · FASE ACTIVA"
                 : " · Cerrada: " + informe.cerradaEn().format(formato));
-        Paragraph resumen = new Paragraph(
-                "Impresos: "
-                        + (seccion == null ? informe.totalImpresos() : seccion.impresos().size())
-                        + " · Pendientes: "
-                        + (seccion == null
-                        ? informe.totalPendientes() : seccion.pendientes().size())
-                        + " · " + periodo, SUBTITULO);
+        Paragraph resumen = new Paragraph(periodo, SUBTITULO);
         resumen.setAlignment(Element.ALIGN_CENTER);
         resumen.setSpacingAfter(12);
         documento.add(resumen);
     }
 
-    private void sindicato(Document documento, InformeFaseImpresion.SeccionSindicato seccion)
-            throws DocumentException {
-        documento.add(tabla(seccion.sindicato(), seccion.impresos(), false));
-        if (!seccion.impresos().isEmpty()) documento.add(constancia(seccion));
-
-        Paragraph pendientes = new Paragraph(
-                "PENDIENTES POR DATOS U OBSERVACIONES ("
-                        + seccion.pendientes().size() + ")", SECCION);
-        pendientes.setSpacingBefore(14);
-        pendientes.setSpacingAfter(4);
-        documento.add(pendientes);
-        documento.add(tabla(seccion.sindicato(), seccion.pendientes(), true));
+    private PdfPTable leyendaObservaciones(int numeroFase) throws DocumentException {
+        PdfPTable bloque = new PdfPTable(2);
+        bloque.setWidthPercentage(100);
+        bloque.setWidths(new float[]{3f, 1f});
+        bloque.setSpacingAfter(8);
+        PdfPCell leyenda = new PdfPCell(new Phrase(
+                "* N° lote = Falta el número de lote.\n"
+                        + "* Sie = Revisar nombre y apellidos frente a la cédula de identidad.\n"
+                        + "* Obs = Productor observado revisión general.\n"
+                        + "* Ci = Falta la cédula de identidad.\n"
+                        + "* Foto = Falta fotografía del productor.\n"
+                        + "* f1, f2... = Fase en que se imprimió el carnet; gris = fase anterior.",
+                CELDA));
+        leyenda.setBorder(Rectangle.NO_BORDER);
+        leyenda.setPaddingLeft(5);
+        leyenda.setPaddingRight(12);
+        bloque.addCell(leyenda);
+        PdfPCell fase = new PdfPCell(new Phrase("FASE " + numeroFase, FASE_DESTACADA));
+        fase.setBorder(Rectangle.BOX);
+        fase.setBorderColor(NEGRO);
+        fase.setBorderWidth(1.2f);
+        fase.setMinimumHeight(62);
+        fase.setHorizontalAlignment(Element.ALIGN_CENTER);
+        fase.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        bloque.addCell(fase);
+        return bloque;
     }
 
-    private PdfPTable tabla(String sindicato, List<InformeFaseImpresion.Fila> filas,
-                            boolean alertas) throws DocumentException {
+    private void sindicato(Document documento, PdfWriter escritor,
+                           InformeFaseImpresion informe,
+                           InformeFaseImpresion.SeccionSindicato seccion,
+                           PdfPTable bloqueConstancia)
+            throws DocumentException {
+        documento.add(tabla(seccion, informe.numeroFase()));
+        documento.add(resumenSindicato(seccion, informe.numeroFase()));
+        constanciaAlPie(documento, escritor, informe, seccion, bloqueConstancia);
+    }
+
+    private void constanciaAlPie(Document documento, PdfWriter escritor,
+                                 InformeFaseImpresion informe,
+                                 InformeFaseImpresion.SeccionSindicato seccion,
+                                 PdfPTable bloque)
+            throws DocumentException {
+        float bordeInferior = 50;
+        float techo = bordeInferior + bloque.getTotalHeight();
+        if (escritor.getVerticalPosition(true) < techo + 12) {
+            documento.newPage();
+            encabezado(documento, informe, seccion);
+        }
+        bloque.writeSelectedRows(0, -1, documento.left(), techo,
+                escritor.getDirectContent());
+    }
+
+    PdfPTable tabla(InformeFaseImpresion.SeccionSindicato seccion, int numeroFase)
+            throws DocumentException {
         String[] titulos = {"N°", "NOMBRES", "APELLIDOS", "C.I.", "N° LOTE",
                 "OBSERVACIONES"};
         PdfPTable tabla = new PdfPTable(titulos.length);
         tabla.setWidthPercentage(100);
         tabla.setWidths(new float[]{.4f, 1.3f, 1.6f, .85f, .8f, 2.8f});
-        PdfPCell nombre = new PdfPCell(new Phrase("SINDICATO: " + sindicato, SECCION));
+        PdfPCell nombre = new PdfPCell(new Phrase("SINDICATO: " + seccion.sindicato(), SECCION));
         nombre.setColspan(titulos.length);
         nombre.setBorderColor(NEGRO);
         nombre.setPadding(4);
@@ -151,20 +188,23 @@ public class InformeFaseImpresionPdf {
         for (String titulo : titulos) tabla.addCell(cabecera(titulo));
         tabla.setHeaderRows(2);
         int numero = 1;
-        for (InformeFaseImpresion.Fila fila : filas) {
-            tabla.addCell(dato(numero++, Element.ALIGN_RIGHT, false));
-            tabla.addCell(dato(fila.nombres(), Element.ALIGN_LEFT, false));
-            tabla.addCell(dato(fila.apellidos(), Element.ALIGN_LEFT, false));
-            tabla.addCell(dato(fila.ci(), Element.ALIGN_LEFT, false));
-            tabla.addCell(dato(fila.lotes(), Element.ALIGN_CENTER, false));
-            String observacion = fila.reimpreso()
-                    ? unir("CARNET REIMPRESO", fila.observaciones())
-                    : String.join(", ", fila.observaciones());
-            tabla.addCell(dato(observacion, Element.ALIGN_LEFT,
-                    alertas || fila.reimpreso()));
+        for (InformeFaseImpresion.Fila fila : seccion.productores()) {
+            tabla.addCell(dato(numero++, Element.ALIGN_RIGHT));
+            tabla.addCell(dato(fila.nombres(), Element.ALIGN_LEFT));
+            tabla.addCell(dato(fila.apellidos(), Element.ALIGN_LEFT));
+            tabla.addCell(dato(fila.ci(), Element.ALIGN_LEFT));
+            tabla.addCell(dato(fila.lotes(), Element.ALIGN_CENTER));
+            PdfPCell observaciones = dato(observaciones(fila), Element.ALIGN_LEFT);
+            List<Integer> marcas = fila.fasesImpresas();
+            if (!marcas.isEmpty()) {
+                observaciones.setPaddingRight(6 + marcas.size() * 17f);
+                observaciones.setCellEvent((celda, posicion, lienzos) ->
+                        dibujarFases(posicion, lienzos, marcas, numeroFase));
+            }
+            tabla.addCell(observaciones);
         }
-        if (filas.isEmpty()) {
-            PdfPCell vacia = dato("Sin registros en este grupo.", Element.ALIGN_CENTER, false);
+        if (seccion.productores().isEmpty()) {
+            PdfPCell vacia = dato("El sindicato no tiene productores.", Element.ALIGN_CENTER);
             vacia.setColspan(titulos.length);
             vacia.setPadding(8);
             tabla.addCell(vacia);
@@ -172,8 +212,65 @@ public class InformeFaseImpresionPdf {
         return tabla;
     }
 
-    private String unir(String primero, List<String> otros) {
-        return otros.isEmpty() ? primero : primero + ", " + String.join(", ", otros);
+    private String observaciones(InformeFaseImpresion.Fila fila) {
+        List<String> notas = new ArrayList<>(6);
+        if (fila.lotes() == null || fila.lotes().isBlank()) notas.add("N° lote");
+        if (fila.datosFaltantes().stream().anyMatch("Revisión SIE pendiente"::equalsIgnoreCase)) {
+            notas.add("Sie");
+        }
+        if (fila.observado()) notas.add("Obs");
+        if (fila.ci() == null || fila.ci().isBlank()) notas.add("Ci");
+        if (fila.datosFaltantes().stream().anyMatch("Fotografía"::equalsIgnoreCase)) {
+            notas.add("Foto");
+        }
+        if (fila.reimpreso()) notas.add("CARNET REIMPRESO");
+        return String.join(", ", notas);
+    }
+
+    private void dibujarFases(Rectangle posicion, PdfContentByte[] lienzos,
+                              List<Integer> fases, int numeroFase) {
+        PdfContentByte figuras = lienzos[PdfPTable.LINECANVAS];
+        PdfContentByte textos = lienzos[PdfPTable.TEXTCANVAS];
+        float centroY = (posicion.getTop() + posicion.getBottom()) / 2;
+        for (int i = 0; i < fases.size(); i++) {
+            int fase = fases.get(fases.size() - 1 - i);
+            float centroX = posicion.getRight() - 9 - i * 17f;
+            Color tinta = fase < numeroFase ? GRIS : NEGRO;
+            figuras.saveState();
+            figuras.setColorStroke(tinta);
+            figuras.setLineWidth(.6f);
+            figuras.circle(centroX, centroY, 5.5f);
+            figuras.stroke();
+            figuras.restoreState();
+            textos.saveState();
+            textos.beginText();
+            textos.setColorFill(tinta);
+            textos.setFontAndSize(CABECERA.getBaseFont(), fase < 10 ? 5.5f : 4.5f);
+            textos.showTextAligned(Element.ALIGN_CENTER, "f" + fase,
+                    centroX, centroY - 1.8f, 0);
+            textos.endText();
+            textos.restoreState();
+        }
+    }
+
+    private PdfPTable resumenSindicato(InformeFaseImpresion.SeccionSindicato seccion,
+                                       int numeroFase) throws DocumentException {
+        PdfPTable tabla = new PdfPTable(5);
+        tabla.setWidthPercentage(100);
+        tabla.setSpacingBefore(8);
+        tabla.setSpacingAfter(8);
+        String[] titulos = {"TOTAL", "IMPRESOS F" + numeroFase, "IMPRESOS ACUMULADOS",
+                "PENDIENTES", "AVANCE"};
+        for (String titulo : titulos) tabla.addCell(cabecera(titulo));
+        int total = seccion.productores().size();
+        int pendientes = total - seccion.impresosAcumulados();
+        String avance = total == 0 ? "0 %"
+                : Math.round(seccion.impresosAcumulados() * 100f / total) + " %";
+        for (Object valor : List.of(total, seccion.impresosEnFase(),
+                seccion.impresosAcumulados(), pendientes, avance)) {
+            tabla.addCell(dato(valor, Element.ALIGN_CENTER));
+        }
+        return tabla;
     }
 
     private PdfPCell cabecera(String texto) {
@@ -185,9 +282,9 @@ public class InformeFaseImpresionPdf {
         return celda;
     }
 
-    private PdfPCell dato(Object valor, int alineacion, boolean alerta) {
+    private PdfPCell dato(Object valor, int alineacion) {
         PdfPCell celda = new PdfPCell(new Phrase(
-                valor == null ? "" : String.valueOf(valor), alerta ? ALERTA : CELDA));
+                valor == null ? "" : String.valueOf(valor), CELDA));
         celda.setBorderColor(new Color(170, 170, 170));
         celda.setBorderWidth(.4f);
         celda.setPadding(3);
@@ -202,9 +299,13 @@ public class InformeFaseImpresionPdf {
         bloque.setWidthPercentage(100);
         bloque.setKeepTogether(true);
         bloque.setSpacingBefore(10);
+        String entrega = seccion.impresosEnFase() == 0
+                ? "No se entregaron carnets del sindicato " + seccion.sindicato()
+                        + " en esta fase.\n\n"
+                : "Recibí conforme " + seccion.impresosEnFase()
+                        + " carnet(s) del sindicato " + seccion.sindicato() + ".\n\n";
         PdfPCell marco = new PdfPCell(new Phrase(
-                "CONSTANCIA DE RECEPCIÓN\n\nRecibí conforme " + seccion.impresos().size()
-                        + " carnet(s) del sindicato " + seccion.sindicato() + ".\n\n"
+                "CONSTANCIA DE RECEPCIÓN\n\n" + entrega
                         + "Nombre de quien recibe: ______________________________    "
                         + "C.I.: ____________________\n\nFirma: __________________________    "
                         + "Fecha: ____ / ____ / ______    Entregado por: ____________________",

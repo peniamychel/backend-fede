@@ -205,7 +205,8 @@ public record ProductorResponse(
     private static boolean credencialLista(Productor p, Map<TipoImagen, String> imagenes) {
         String apellidos = p.getApellidosCorregidos() != null
                 ? p.getApellidosCorregidos() : p.getApellidos();
-        return p.isEstado()
+        return p.getEliminadoEn() == null
+                && p.isEstado()
                 && !p.isObservado()
                 && !p.isRevisionSieBloqueaImpresion()
                 && apellidos != null && !apellidos.isBlank()

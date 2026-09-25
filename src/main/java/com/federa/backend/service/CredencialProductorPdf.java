@@ -75,7 +75,7 @@ public class CredencialProductorPdf {
     private static final Font FIRMA_CARGO = fuente(4f, Font.BOLD, Color.BLACK);
     private static final Font FIRMA_ORGANIZACION = fuente(3.8f, Font.NORMAL, Color.BLACK);
 
-    private static final String PLANTILLA_CARA = "/plantillas/credencial/cara.jpg";
+    private static final String PLANTILLA_CARA = "/plantillas/credencial/cara.png";
     private static final String PLANTILLA_REVERSO = "/plantillas/credencial/reverso.jpg";
 
     /** Las copias conservan el mismo serial y OpenPDF incrusta cada fondo una sola vez. */

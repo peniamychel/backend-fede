@@ -41,8 +41,7 @@ class InformeSindicatoPdfTest {
                     "PRODUCTOR " + i,
                     "APELLIDO " + i,
                     "800000" + i,
-                    String.valueOf(i),
-                    "CP" + i));
+                    String.valueOf(i)));
         }
         return new InformeSindicato("FEDERACIÓN CARRASCO", "1RO MAYO", "ALTO SAN SALVADOR",
                 filas, dirigente, 2026);
@@ -117,12 +116,15 @@ class InformeSindicatoPdfTest {
             assertThat(texto(pdf, pagina))
                     .as("página " + pagina)
                     .contains("FEDERACIÓN CARRASCO")
-                    .contains("CENTRAL: 1RO MAYO")
+                    .contains("NÓMINA DE PRODUCTORES")
+                    .contains("CENTRAL 1RO MAYO")
                     .contains("SINDICATO: ALTO SAN SALVADOR")
-                    // La fila de encabezados también se repite sola.
-                    .contains("NOMBRE COMPLETO")
-                    .contains("OBSERVACIONES")
-                    .contains("Página " + pagina + " de " + paginas(pdf));
+                    .contains("Página " + pagina + " de");
+            // El acta puede ocupar una hoja propia; solo las páginas con
+            // productores repiten las cabeceras de la tabla.
+            if (texto(pdf, pagina).contains("PRODUCTOR ")) {
+                assertThat(texto(pdf, pagina)).contains("NOMBRES", "OBSERVACIONES");
+            }
         }
     }
 
@@ -142,9 +144,15 @@ class InformeSindicatoPdfTest {
         String texto = texto(pdf, 1);
 
         assertThat(texto).contains("PRODUCTOR 1").contains("APELLIDO 1").contains("8000001");
-        assertThat(texto).contains("PRODUCTOR 2").contains("CP2");
+        assertThat(texto).contains("PRODUCTOR 2");
         assertThat(texto).contains("PRODUCTOR 3");
         assertThat(paginas(pdf)).isEqualTo(1);
+        PdfReader lector = new PdfReader(pdf);
+        try {
+            assertThat(lector.getPageSize(1).getWidth()).isLessThan(lector.getPageSize(1).getHeight());
+        } finally {
+            lector.close();
+        }
     }
 
     @Test
@@ -152,8 +160,8 @@ class InformeSindicatoPdfTest {
     void correlativoContinuo() throws IOException {
         byte[] pdf = generador.generar(informe(80, null));
 
-        // La fila 80 tiene que existir, y en la última página.
-        assertThat(texto(pdf, paginas(pdf))).contains("PRODUCTOR 80");
+        // El acta puede ocupar una última página independiente.
+        assertThat(textoCompleto(pdf)).contains("PRODUCTOR 80");
         assertThat(textoCompleto(pdf)).contains("PRODUCTOR 40").contains("PRODUCTOR 41");
     }
 

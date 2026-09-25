@@ -1,7 +1,6 @@
 package com.federa.backend.service;
 
 import com.federa.backend.dto.InformePreImpresionCentral;
-import com.lowagie.text.Chunk;
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
@@ -35,13 +34,11 @@ public class InformePreImpresionCentralPdf {
     private static final Color NEGRO = Color.BLACK;
     private static final Color FONDO_GRIS = new Color(235, 235, 235);
     private static final Color GRIS = new Color(115, 115, 115);
-    private static final Color NEGRO_ALERTA = Color.BLACK;
     private static final Font TITULO = fuente(14, Font.BOLD, NEGRO);
     private static final Font SUBTITULO = fuente(9f, Font.NORMAL, GRIS);
     private static final Font SECCION = fuente(9, Font.BOLD, Color.BLACK);
     private static final Font CABECERA = fuente(9f, Font.BOLD, Color.BLACK);
     private static final Font CELDA = fuente(9f, Font.NORMAL, Color.BLACK);
-    private static final Font OBSERVADO = fuente(9f, Font.BOLD, NEGRO_ALERTA);
     private static final Font PIE = fuente(8, Font.NORMAL, Color.BLACK);
 
     public byte[] generar(InformePreImpresionCentral informe) {
@@ -82,6 +79,7 @@ public class InformePreImpresionCentralPdf {
         PdfWriter.getInstance(documento, salida);
         documento.open();
         encabezado(documento, informe, seccion);
+        documento.add(leyendaObservaciones());
         documento.add(tabla(seccion));
         documento.add(constancia(seccion));
         documento.close();
@@ -90,6 +88,27 @@ public class InformePreImpresionCentralPdf {
 
     private Document nuevoDocumento() {
         return new Document(PageSize.LETTER, 30, 30, 28, 40);
+    }
+
+    private Paragraph leyendaObservaciones() {
+        Paragraph leyenda = new Paragraph(
+                "* N° lote = Falta el número de lote.\n"
+                        + "* Sie = Revisar nombre y apellidos frente a la cédula de identidad.\n"
+                        + "* Obs = Productor observado revisión general.\n"
+                        + "* Ci = Falta la cédula de identidad.\n"
+                        + "* Foto = Falta fotografía del productor.", CELDA);
+        leyenda.setIndentationLeft(5);
+        leyenda.setSpacingAfter(6);
+        return leyenda;
+    }
+
+    static int cantidadFilasEnBlanco(int productores) {
+        if (productores < 10) return 2;
+        if (productores < 30) return 3;
+        if (productores < 50) return 4;
+        if (productores < 70) return 5;
+        if (productores < 100) return 6;
+        return 7;
     }
 
     private void encabezado(
@@ -121,7 +140,7 @@ public class InformePreImpresionCentralPdf {
         documento.add(resumen);
     }
 
-    private PdfPTable tabla(InformePreImpresionCentral.SeccionSindicato seccion)
+    PdfPTable tabla(InformePreImpresionCentral.SeccionSindicato seccion)
             throws DocumentException {
         String[] titulos = {"N°", "NOMBRES", "APELLIDOS", "C.I.", "N° LOTE",
                 "DATOS FALTANTES"};
@@ -154,22 +173,27 @@ public class InformePreImpresionCentralPdf {
             vacia.setPadding(8);
             tabla.addCell(vacia);
         }
+        for (int i = 0; i < cantidadFilasEnBlanco(seccion.productores().size()); i++) {
+            PdfPCell vacia = dato("", Element.ALIGN_LEFT);
+            vacia.setColspan(titulos.length);
+            vacia.setMinimumHeight(24);
+            tabla.addCell(vacia);
+        }
         return tabla;
     }
 
     private PdfPCell datosFaltantes(InformePreImpresionCentral.Fila fila) {
-        Phrase frase = new Phrase();
-        if (fila.observado()) {
-            frase.add(new Chunk("(OBSERVADO)", OBSERVADO));
-            if (!fila.datosFaltantes().isEmpty()) frase.add(new Chunk(" ", CELDA));
+        List<String> notas = new ArrayList<>(5);
+        if (fila.lotes() == null || fila.lotes().isBlank()) notas.add("N° lote");
+        if (fila.datosFaltantes().stream().anyMatch("Revisión SIE pendiente"::equalsIgnoreCase)) {
+            notas.add("Sie");
         }
-        List<String> visibles = fila.datosFaltantes().stream()
-                .filter(dato -> !"Observado".equalsIgnoreCase(dato))
-                .toList();
-        frase.add(new Chunk(String.join(", ", visibles), CELDA));
-        PdfPCell celda = new PdfPCell(frase);
-        configurarDato(celda, Element.ALIGN_LEFT);
-        return celda;
+        if (fila.observado()) notas.add("Obs");
+        if (fila.ci() == null || fila.ci().isBlank()) notas.add("Ci");
+        if (fila.datosFaltantes().stream().anyMatch("Fotografía"::equalsIgnoreCase)) {
+            notas.add("Foto");
+        }
+        return dato(String.join(", ", notas), Element.ALIGN_LEFT);
     }
 
     private PdfPCell cabecera(String texto) {

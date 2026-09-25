@@ -843,12 +843,8 @@ public class CredencialService {
     }
 
     private List<Productor> productoresOrdenados(Long sindicatoId) {
-        List<Productor> productores = new ArrayList<>(
-                productorRepository.findBySindicatoId(sindicatoId));
-        productores.sort(Comparator
-                .comparing(CredencialService::apellidosDe, ALFABETO::compare)
-                .thenComparing(CredencialService::nombresDe, ALFABETO::compare));
-        return productores;
+        return productorRepository
+                .findNoVetadosBySindicatoIdOrderByApellidosAscNombresAsc(sindicatoId);
     }
 
     private List<CredencialPrevia.Faltante> faltantesDe(Productor productor, Sindicato sindicato,
@@ -931,6 +927,10 @@ public class CredencialService {
 
     /** Una baja administrativa siempre deja la credencial fuera de emisión. */
     private void exigirHabilitado(Productor productor) {
+        if (productor.getEliminadoEn() != null) {
+            throw new ReglaNegocioException(productor.getNombreCompleto()
+                    + " está en la papelera y su carnet no se imprime. Restauralo primero.");
+        }
         if (productor.isEstado()) {
             return;
         }
@@ -966,23 +966,24 @@ public class CredencialService {
             return null;
         }
         return new CredencialPrevia.Bloqueo(
-                "Observado por la asamblea",
+                "PRODUCTOR VETADO",
                 veto.getMotivo(),
-                veto.getReunion().getTitulo(),
+                veto.getReunion() == null ? "" : veto.getReunion().getTitulo(),
                 veto.getDesde(),
-                "Se destraba cuando otra reunión decida sacarlo de la lista de vetados, y se "
-                + "suba el acta de esa reunión.");
+                "Para quitar el veto, abrí Productores vetados desde el menú del "
+                + "sindicato, elegí Levantar veto y registrá el motivo del levantamiento.");
     }
 
     private CredencialPrevia.Bloqueo bloqueoDe(VetoResponse veto) {
         if (veto == null) return null;
         return new CredencialPrevia.Bloqueo(
-                "Observado por la asamblea",
+                "PRODUCTOR VETADO",
                 veto.motivo(),
                 veto.reunion() == null ? "" : veto.reunion().titulo(),
                 veto.desde(),
-                "Se destraba cuando otra reunión decida sacarlo de la lista de vetados, y se "
-                        + "suba el acta de esa reunión.");
+                "Para quitar el veto, abrí Productores vetados desde el menú del "
+                        + "sindicato, elegí Levantar veto y registrá el motivo del "
+                        + "levantamiento.");
     }
 
     private CredencialPrevia.Firmante firmantePrevio(Cargo cargo) {

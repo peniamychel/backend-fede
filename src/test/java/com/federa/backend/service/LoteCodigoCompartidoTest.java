@@ -161,6 +161,65 @@ class LoteCodigoCompartidoTest {
     }
 
     @Test
+    void letraManualBPermaneceConUnProductorYElSiguienteRecibeA() {
+        Lote loteJuan = lote(10L);
+        Productor juan = productor(1L, 78);
+        TenenciaLote tenenciaJuan = tenencia(1L, loteJuan, juan);
+        tenenciaJuan.setLetraReservada("B");
+        when(tenencias.findVigentesDelNumero(7L, "78"))
+                .thenReturn(List.of(tenenciaJuan));
+
+        servicio.recalcularCodigosDelGrupo(loteJuan);
+        assertThat(juan.getLetraCodigo()).isEqualTo("B");
+
+        Lote loteMaria = lote(11L);
+        loteMaria.setEstadoLote(EstadoLote.CON_SISTEMA);
+        Productor maria = productor(2L, 79);
+        TenenciaLote tenenciaMaria = tenencia(2L, loteMaria, maria);
+        when(tenencias.findVigentesDelNumero(7L, "78"))
+                .thenReturn(List.of(tenenciaJuan, tenenciaMaria));
+
+        servicio.recalcularCodigosDelGrupo(loteJuan);
+        assertThat(juan.getLetraCodigo()).isEqualTo("B");
+        assertThat(maria.getLetraCodigo()).isEqualTo("A");
+    }
+
+    @Test
+    void cambioManualDesplazaALetraAutomaticaSinPerderPrioridadEntreLasRestantes() {
+        Lote loteJuan = lote(10L);
+        loteJuan.setEstadoLote(EstadoLote.CON_SISTEMA);
+        Lote loteMaria = lote(11L);
+        Productor juan = productor(1L, 78);
+        Productor maria = productor(2L, 79);
+        TenenciaLote tenenciaJuan = tenencia(1L, loteJuan, juan);
+        TenenciaLote tenenciaMaria = tenencia(2L, loteMaria, maria);
+        when(tenencias.findVigentesDelNumero(7L, "78"))
+                .thenReturn(List.of(tenenciaJuan, tenenciaMaria));
+
+        servicio.recalcularCodigosDelGrupo(loteJuan);
+        assertThat(juan.getLetraCodigo()).isEqualTo("A");
+        tenenciaMaria.setLetraReservada("A");
+        servicio.recalcularCodigosDelGrupo(loteJuan);
+        assertThat(maria.getLetraCodigo()).isEqualTo("A");
+        assertThat(juan.getLetraCodigo()).isEqualTo("B");
+    }
+
+    @Test
+    void dosReservasDeLaMismaLetraSeRechazan() {
+        Lote primero = lote(10L);
+        TenenciaLote a = tenencia(1L, primero, productor(1L, 78));
+        TenenciaLote b = tenencia(2L, lote(11L), productor(2L, 79));
+        a.setLetraReservada("A");
+        b.setLetraReservada("A");
+        when(tenencias.findVigentesDelNumero(7L, "78"))
+                .thenReturn(List.of(a, b));
+
+        assertThatThrownBy(() -> servicio.recalcularCodigosDelGrupo(primero))
+                .isInstanceOf(ReglaNegocioException.class)
+                .hasMessageContaining("ya está reservada");
+    }
+
+    @Test
     void recalculaVariosGruposConUnaSolaConsulta() {
         Lote primero = lote(10L);
         Lote segundo = lote(11L);
@@ -304,6 +363,28 @@ class LoteCodigoCompartidoTest {
         assertThat(carlos.getLetraCodigo()).isEqualTo("B");
         assertThat(carlos.getCorrelativo()).isEqualTo(78);
         assertThat(maria.getCorrelativo()).isEqualTo(79);
+    }
+
+    @Test
+    void cambiarClasificacionNoMueveUnaLetraReservada() {
+        Lote loteJuan = lote(10L);
+        loteJuan.setEstadoLote(EstadoLote.BLANCO);
+        Lote loteMaria = lote(11L);
+        loteMaria.setEstadoLote(EstadoLote.BLANCO);
+        Productor juan = productor(1L, 78);
+        Productor maria = productor(2L, 79);
+        TenenciaLote tenenciaJuan = tenencia(1L, loteJuan, juan);
+        tenenciaJuan.setLetraReservada("B");
+        TenenciaLote tenenciaMaria = tenencia(2L, loteMaria, maria);
+        when(lotes.findById(10L)).thenReturn(Optional.of(loteJuan));
+        when(tenencias.findVigentesDelNumero(7L, "78"))
+                .thenReturn(List.of(tenenciaJuan, tenenciaMaria));
+
+        servicio.actualizar(10L, new LoteRequest(
+                "78", null, "CON_SISTEMA", null, 7L, null, null));
+
+        assertThat(juan.getLetraCodigo()).isEqualTo("B");
+        assertThat(maria.getLetraCodigo()).isEqualTo("A");
     }
 
     @Test

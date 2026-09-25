@@ -68,6 +68,14 @@ public record LoteRequest(
                 + "período de tenencia; al editarlo se ignora, porque cambiar de tenedor es "
                 + "un traspaso y va por su propio endpoint.",
                 example = "812")
-        Long productorId
+        Long productorId,
+
+        @Schema(description = "Letra A-H reservada manualmente para el primer tenedor; "
+                + "omitirla deja la asignación automática.")
+        String letra
 ) {
+    public LoteRequest(String numero, String extension, String estado, String mercado,
+                       Long sindicatoId, BigDecimal superficie, Long productorId) {
+        this(numero, extension, estado, mercado, sindicatoId, superficie, productorId, null);
+    }
 }

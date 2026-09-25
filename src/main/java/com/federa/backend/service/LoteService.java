@@ -32,6 +32,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Lotes y su tenencia.
@@ -74,6 +76,43 @@ public class LoteService {
     }
 
     // ------------------------------------------------------------- consulta
+
+    @Transactional
+    public LoteResponse guardarSoloNumero(Long productorId,
+            com.federa.backend.dto.NumeroLoteRequest request) {
+        Productor productor = productorRepository.findByIdParaRevisionSie(productorId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Productor inexistente"));
+        com.federa.backend.seguridad.AlcanceCentral.limitar(productor.getSindicato().getCentral().getId());
+        com.federa.backend.seguridad.AlcanceCentral.verificarSindicato(productor.getSindicato().getId());
+        String numero = Textos.limpiar(request.numero());
+        if (numero == null || numero.length() > 20) {
+            throw new ReglaNegocioException("Ingresá un número de lote válido");
+        }
+        List<Lote> actuales = loteRepository.findVigentesDeProductor(productorId);
+        if (actuales.isEmpty()) {
+            if (request.loteId() != null) throw new ReglaNegocioException("El productor ya no tiene esa parcela");
+            return crear(new LoteRequest(numero, null, null, null,
+                    productor.getSindicato().getId(), null, productorId, request.letra()));
+        }
+        Lote lote = actuales.stream().filter(l -> request.loteId() == null
+                || request.loteId().equals(l.getId())).findFirst()
+                .orElseThrow(() -> new ReglaNegocioException("La parcela no pertenece al productor"));
+        if (actuales.size() > 1 && request.loteId() == null) {
+            throw new ReglaNegocioException("Seleccioná la parcela cuyo número querés editar");
+        }
+        Lote anterior = referenciaDeGrupo(lote, lote.getNumero());
+        boolean cambiaGrupo = !grupoDe(anterior).equals(
+                new GrupoLote(lote.getSindicato().getId(), numero.trim().toUpperCase(java.util.Locale.ROOT)));
+        if (cambiaGrupo || request.letra() != null) {
+            reservarLetra(lote, request.letra());
+        }
+        lote.setNumero(numero);
+        loteRepository.flush();
+        recalcularCodigosDelGrupo(anterior);
+        recalcularCodigosDelGrupo(lote);
+        loteRepository.flush();
+        return LoteResponse.desde(lote);
+    }
 
     public List<LoteResponse> listar(Long productorId, Long sindicatoId) {
         List<Lote> lotes;
@@ -261,7 +300,9 @@ public class LoteService {
                 lote.setEstadoOriginal(productor.getClasificacionPendiente().name());
             }
             productor.setClasificacionPendiente(null);
-            tenenciaRepository.save(productor.tomarLote(lote, LocalDate.now()));
+            TenenciaLote tenencia = productor.tomarLote(lote, LocalDate.now());
+            tenencia.setLetraReservada(normalizarLetra(request.letra()));
+            tenenciaRepository.save(tenencia);
             tenenciaRepository.flush();
             recalcularCodigosDelGrupo(lote);
         }
@@ -297,6 +338,8 @@ public class LoteService {
         loteRepository.flush();
 
         if (cambiaNumero) {
+            tenenciaRepository.findByLoteIdAndVigenteIsTrue(id)
+                    .ifPresent(tenencia -> tenencia.setLetraReservada(null));
             // Cambiar de lote solo afecta la letra A-H. El código pertenece al
             // productor y debe seguir siendo el mismo.
             recalcularCodigosDelGrupo(grupoAnterior);
@@ -342,6 +385,7 @@ public class LoteService {
                         + "(%s). Corregí la fecha.", desde, actual.getDesde()));
             }
             actual.terminar(cierreDe(actual.getDesde(), desde));
+            actual.getProductor().setLetraCodigo(null);
             actual.setMotivo(peticion.motivo());
             if (peticion.observaciones() != null) {
                 actual.setObservaciones(Textos.limpiar(peticion.observaciones()));
@@ -470,9 +514,10 @@ public class LoteService {
      * Coordina la letra del lote entre los productores que comparten número
      * dentro del mismo sindicato.
      * <p>
-     * Con uno solo no hay letra. Desde dos se reparten A-H dando prioridad a
-     * las participaciones clasificadas con sistema. Dentro de la misma
-     * prioridad se conserva el orden de tenencia. El correlativo nunca cambia:
+     * Con uno solo no hay letra salvo que se haya reservado manualmente.
+     * Desde dos se reparten las letras A-H libres dando prioridad a las
+     * participaciones con sistema. Las reservas manuales siempre se respetan.
+     * Dentro de la misma prioridad se conserva el orden de tenencia. El correlativo nunca cambia:
      * es el código único del productor dentro de la central, no parte de la
      * clasificación del lote.
      */
@@ -525,20 +570,50 @@ public class LoteService {
         if (grupo.isEmpty()) {
             return;
         }
-        if (grupo.size() == 1) {
-            grupo.get(0).getProductor().setLetraCodigo(null);
-            return;
-        }
-
         grupo.sort(Comparator
                 .comparingInt((TenenciaLote t) ->
                         t.getLote().getEstadoLote() == EstadoLote.CON_SISTEMA ? 0 : 1)
                 .thenComparing(TenenciaLote::getId));
 
-        for (int i = 0; i < grupo.size(); i++) {
-            Productor productor = grupo.get(i).getProductor();
-            productor.setLetraCodigo(LETRAS_COMPARTIDAS[i]);
+        Set<String> reservadas = new HashSet<>();
+        for (TenenciaLote tenencia : grupo) {
+            String letra = tenencia.getLetraReservada();
+            if (letra != null && !reservadas.add(letra)) {
+                throw new ReglaNegocioException("La letra " + letra
+                        + " ya está reservada para otro productor del lote " + referencia.getNumero());
+            }
         }
+        int siguiente = 0;
+        for (TenenciaLote tenencia : grupo) {
+            if (tenencia.getLetraReservada() != null) {
+                tenencia.getProductor().setLetraCodigo(tenencia.getLetraReservada());
+            } else if (grupo.size() == 1) {
+                tenencia.getProductor().setLetraCodigo(null);
+            } else {
+                while (reservadas.contains(LETRAS_COMPARTIDAS[siguiente])) siguiente++;
+                String letra = LETRAS_COMPARTIDAS[siguiente++];
+                reservadas.add(letra);
+                tenencia.getProductor().setLetraCodigo(letra);
+            }
+        }
+    }
+
+    private void reservarLetra(Lote lote, String valor) {
+        TenenciaLote tenencia = tenenciaRepository.findByLoteIdAndVigenteIsTrue(lote.getId())
+                .orElseThrow(() -> new ReglaNegocioException("La parcela no tiene un tenedor vigente"));
+        tenencia.setLetraReservada(normalizarLetra(valor));
+    }
+
+    private String normalizarLetra(String valor) {
+        String letra = Textos.limpiar(valor);
+        if (letra != null) {
+            letra = letra.toUpperCase(java.util.Locale.ROOT);
+            String elegida = letra;
+            if (java.util.Arrays.stream(LETRAS_COMPARTIDAS).noneMatch(elegida::equals)) {
+                throw new ReglaNegocioException("Elegí una letra de A a H o Automática");
+            }
+        }
+        return letra;
     }
 
     private GrupoLote grupoDe(Lote lote) {

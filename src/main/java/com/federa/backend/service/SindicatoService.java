@@ -35,10 +35,12 @@ public class SindicatoService {
     }
 
     public List<SindicatoResponse> listar(Long centralId) {
+        centralId = com.federa.backend.seguridad.AlcanceCentral.limitar(centralId);
         List<Sindicato> sindicatos = centralId != null
                 ? sindicatoRepository.findByCentralIdOrderByNombreAsc(centralId)
                 : sindicatoRepository.findAll(org.springframework.data.domain.Sort.by("nombre"));
-        return sindicatos.stream().map(SindicatoResponse::desde).toList();
+        return sindicatos.stream().filter(s -> com.federa.backend.seguridad.AlcanceCentral.permiteSindicato(s.getId()))
+                .map(SindicatoResponse::desde).toList();
     }
 
     public SindicatoResponse obtener(Long id) {
@@ -126,7 +128,7 @@ public class SindicatoService {
     @Transactional
     public void eliminar(Long id) {
         Sindicato sindicato = buscar(id);
-        long productores = productorRepository.countBySindicatoId(id);
+        long productores = productorRepository.countBySindicatoIdIncludingPapelera(id);
         if (productores > 0) {
             throw new ReglaNegocioException(
                     "El sindicato " + sindicato.getNombre() + " tiene " + productores

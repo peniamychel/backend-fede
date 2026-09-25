@@ -102,15 +102,27 @@ class RevisionSieProductorServiceTest {
     }
 
     @Test
-    void noApruebaManualmenteUnaCorreccionSiePendiente() {
+    void permiteAprobarLosDatosExistentesAnteUnaCorreccionSiePendiente() {
         Productor productor = pendiente("ANA", "ROJAS", "456");
         productor.setRevisionSiePendiente(false);
         productor.setRevisionSieEstado(EstadoRevisionSieProductor.DIFERENCIA_PENDIENTE);
+        productor.setRevisionSieMensaje("SIE propone otra identidad.");
+        productor.setSieNombresSugeridos("MARÍA");
+        productor.setSieApellidosSugeridos("PÉREZ");
         when(productores.findByIdParaRevisionSie(9L)).thenReturn(Optional.of(productor));
 
-        assertThatThrownBy(() -> servicio.aprobarDatosActuales(9L))
-                .isInstanceOf(ReglaNegocioException.class)
-                .hasMessageContaining("SIE no encontró");
+        RevisionSieProductorResponse resultado = servicio.aprobarDatosActuales(9L);
+
+        assertThat(resultado.estado())
+                .isEqualTo(RevisionSieProductorResponse.Estado.APROBADA_MANUAL);
+        assertThat(productor.getNombres()).isEqualTo("ANA");
+        assertThat(productor.getApellidos()).isEqualTo("ROJAS");
+        assertThat(productor.getRevisionSieEstado())
+                .isEqualTo(EstadoRevisionSieProductor.APROBADO_MANUAL);
+        assertThat(productor.isRevisionSieBloqueaImpresion()).isFalse();
+        assertThat(productor.getSieNombresSugeridos()).isNull();
+        assertThat(productor.getSieApellidosSugeridos()).isNull();
+        assertThat(productor.getRevisionSieMensaje()).contains("datos existentes");
     }
 
     @Test

@@ -15,10 +15,8 @@ public record VetoRequest(
         @NotNull(message = "hay que decir a quién se veta")
         Long productorId,
 
-        @Schema(description = "La reunión que lo decidió. Tiene que tener su acta subida: "
-                + "es el documento que respalda la sanción.",
-                example = "7", requiredMode = Schema.RequiredMode.REQUIRED)
-        @NotNull(message = "hay que decir en qué reunión se decidió")
+        @Schema(description = "Reunión histórica que decidió el veto. Es opcional para los "
+                + "vetos administrados directamente desde el sindicato.", example = "7")
         Long reunionId,
 
         @Schema(description = "Por qué, con el detalle que dé el acta.",
@@ -28,7 +26,7 @@ public record VetoRequest(
         @Size(max = 1000, message = "el motivo no puede superar los 1000 caracteres")
         String motivo,
 
-        @Schema(description = "Desde cuándo rige. Si no viene, la fecha de la reunión.",
+        @Schema(description = "Desde cuándo rige. Si no viene, la fecha actual.",
                 example = "2026-03-12")
         LocalDate desde
 ) {

@@ -59,6 +59,9 @@ public class VetoService {
      * opcionalmente dentro de un sindicato.
      */
     public List<VetoResponse> buscar(String texto, Long sindicatoId, boolean soloVigentes) {
+        if (sindicatoId != null) {
+            com.federa.backend.seguridad.AlcanceCentral.verificarSindicato(sindicatoId);
+        }
         return vetoRepository.buscar(Textos.limpiar(texto), sindicatoId, soloVigentes)
                 .stream().map(VetoResponse::desde).toList();
     }
@@ -90,7 +93,10 @@ public class VetoService {
         Productor productor = productorRepository.findById(peticion.productorId())
                 .orElseThrow(() -> new RecursoNoEncontradoException(
                         "productor", peticion.productorId()));
-        Reunion reunion = buscarReunionConActa(peticion.reunionId());
+        com.federa.backend.seguridad.AlcanceCentral.verificarSindicato(
+                productor.getSindicato().getId());
+        Reunion reunion = peticion.reunionId() == null
+                ? null : buscarReunionConActa(peticion.reunionId());
 
         vetoRepository.findByProductorIdAndVigenteIsTrue(productor.getId())
                 .ifPresent(abierto -> {
@@ -104,7 +110,9 @@ public class VetoService {
         veto.setProductor(productor);
         veto.setReunion(reunion);
         veto.setMotivo(exigirMotivo(peticion.motivo()));
-        LocalDate desde = peticion.desde() == null ? reunion.getFecha() : peticion.desde();
+        LocalDate desde = peticion.desde() != null
+                ? peticion.desde()
+                : reunion != null ? reunion.getFecha() : LocalDate.now();
         veto.iniciar(desde);
 
         dejarElCargo(productor, desde);
@@ -127,15 +135,19 @@ public class VetoService {
                     "El veto de %s ya se levantó el %s.",
                     veto.getProductor().getNombreCompleto(), veto.getHasta()));
         }
+        com.federa.backend.seguridad.AlcanceCentral.verificarSindicato(
+                veto.getProductor().getSindicato().getId());
 
-        Reunion reunion = buscarReunionConActa(reunionId);
-        if (reunion.getId().equals(veto.getReunion().getId())) {
+        Reunion reunion = reunionId == null ? null : buscarReunionConActa(reunionId);
+        if (reunion != null && veto.getReunion() != null
+                && reunion.getId().equals(veto.getReunion().getId())) {
             throw new ReglaNegocioException(
                     "Sacarlo de la lista se decide en otra reunión, no en la misma que lo "
                     + "vetó.");
         }
 
-        LocalDate fecha = hasta == null ? reunion.getFecha() : hasta;
+        LocalDate fecha = hasta != null
+                ? hasta : reunion != null ? reunion.getFecha() : LocalDate.now();
         if (fecha.isBefore(veto.getDesde())) {
             throw new ReglaNegocioException(String.format(
                     "El veto se levantaría el %s, antes de haber empezado (%s).",

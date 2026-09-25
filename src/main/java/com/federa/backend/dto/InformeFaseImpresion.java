@@ -19,8 +19,9 @@ public record InformeFaseImpresion(
     public record SeccionSindicato(
             Long sindicatoId,
             String sindicato,
-            List<Fila> impresos,
-            List<Fila> pendientes) {
+            List<Fila> productores,
+            int impresosEnFase,
+            int impresosAcumulados) {
     }
 
     public record Fila(
@@ -29,7 +30,9 @@ public record InformeFaseImpresion(
             String apellidos,
             String ci,
             String lotes,
-            List<String> observaciones,
+            boolean observado,
+            List<String> datosFaltantes,
+            List<Integer> fasesImpresas,
             boolean reimpreso) {
     }
 }

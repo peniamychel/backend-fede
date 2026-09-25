@@ -3,6 +3,7 @@ package com.federa.backend.service;
 import com.federa.backend.almacen.AlmacenObjetos;
 import com.federa.backend.almacen.TransaccionArchivos;
 import com.federa.backend.dto.ProductorDetalleResponse;
+import com.federa.backend.dto.ProductorPapeleraResponse;
 import com.federa.backend.dto.ProductorRequest;
 import com.federa.backend.dto.ProductorResponse;
 import com.federa.backend.exception.RecursoNoEncontradoException;
@@ -12,10 +13,14 @@ import com.federa.backend.model.Sindicato;
 import com.federa.backend.model.TenenciaLote;
 import com.federa.backend.model.enums.TipoImagen;
 import com.federa.backend.model.enums.EstadoRevisionSieProductor;
+import com.federa.backend.repository.AsistenciaRepository;
+import com.federa.backend.repository.CargoRepository;
+import com.federa.backend.repository.DetalleGrupoImpresionCredencialRepository;
 import com.federa.backend.repository.ImagenCargoRepository;
 import com.federa.backend.repository.ImagenProductorRepository;
 import com.federa.backend.repository.ProductorRepository;
 import com.federa.backend.repository.TenenciaLoteRepository;
+import com.federa.backend.repository.VetoRepository;
 import com.federa.backend.util.Paginas;
 import com.federa.backend.util.Textos;
 import org.springframework.data.domain.Page;
@@ -23,6 +28,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -40,6 +46,10 @@ public class ProductorService {
     private final SindicatoService sindicatoService;
     private final NumeradorPadron numerador;
     private final AlmacenObjetos almacen;
+    private final VetoRepository vetoRepository;
+    private final CargoRepository cargoRepository;
+    private final AsistenciaRepository asistenciaRepository;
+    private final DetalleGrupoImpresionCredencialRepository detalleGrupoRepository;
 
     public ProductorService(ProductorRepository productorRepository,
                             TenenciaLoteRepository tenenciaRepository,
@@ -47,7 +57,11 @@ public class ProductorService {
                             ImagenCargoRepository imagenCargoRepository,
                             SindicatoService sindicatoService,
                             NumeradorPadron numerador,
-                            AlmacenObjetos almacen) {
+                            AlmacenObjetos almacen,
+                            VetoRepository vetoRepository,
+                            CargoRepository cargoRepository,
+                            AsistenciaRepository asistenciaRepository,
+                            DetalleGrupoImpresionCredencialRepository detalleGrupoRepository) {
         this.productorRepository = productorRepository;
         this.tenenciaRepository = tenenciaRepository;
         this.imagenRepository = imagenRepository;
@@ -55,11 +69,24 @@ public class ProductorService {
         this.sindicatoService = sindicatoService;
         this.numerador = numerador;
         this.almacen = almacen;
+        this.vetoRepository = vetoRepository;
+        this.cargoRepository = cargoRepository;
+        this.asistenciaRepository = asistenciaRepository;
+        this.detalleGrupoRepository = detalleGrupoRepository;
     }
 
     public Page<ProductorResponse> listar(Long sindicatoId, Long centralId, String texto, Pageable pageable) {
+        centralId = com.federa.backend.seguridad.AlcanceCentral.limitar(centralId);
         String busqueda = Textos.normalizar(texto);
         String patron = busqueda == null ? null : "%" + busqueda + "%";
+        var alcance = com.federa.backend.seguridad.AlcanceCentral.actual();
+        if (sindicatoId != null) com.federa.backend.seguridad.AlcanceCentral.verificarSindicato(sindicatoId);
+        if (alcance != null && !alcance.todosSindicatos()) {
+            return conImagenes(productorRepository.filtrarConAlcance(sindicatoId, centralId, busqueda, patron,
+                    Textos.patronBusqueda(busqueda), true,
+                    alcance.sindicatoIds().isEmpty() ? List.of(-1L) : alcance.sindicatoIds(),
+                    Paginas.conOrdenEstable(pageable)));
+        }
         return conImagenes(productorRepository
                 .filtrar(sindicatoId, centralId, busqueda, patron,
                         Textos.patronBusqueda(busqueda),
@@ -86,6 +113,7 @@ public class ProductorService {
 
     @Transactional
     public ProductorResponse crear(ProductorRequest request) {
+        impedirCedulaVetada(request.ci());
         Productor productor = new Productor();
         aplicar(productor, request);
         productor.setFaseImpresionPendiente(true);
@@ -96,6 +124,10 @@ public class ProductorService {
     @Transactional
     public ProductorResponse actualizar(Long id, ProductorRequest request) {
         Productor productor = buscar(id);
+        String ciNueva = Textos.limpiar(request.ci());
+        if (!java.util.Objects.equals(Textos.limpiar(productor.getCi()), ciNueva)) {
+            impedirCedulaVetada(ciNueva);
+        }
         boolean cambioDeIdentidad = cambioDeIdentidad(productor, request);
         String identidadAnterior = identidadDe(productor);
         aplicar(productor, request);
@@ -112,18 +144,17 @@ public class ProductorService {
         return ProductorResponse.desde(productor);
     }
 
-    /**
-     * Borra el productor con sus imágenes y sus períodos de
-     * tenencia. <b>Sus lotes no</b>: la tierra pertenece al sindicato y se
-     * queda ahí, con o sin él.
-     * <p>
-     * Las filas se van por cascade, pero los archivos del almacén no: el disco
-     * no sabe nada de JPA. Hay que leer sus claves antes de borrar y quitarlos
-     * después de confirmar, o quedan huérfanos ocupando espacio para siempre.
-     */
+    /** Mueve la ficha íntegra a la papelera, sin borrar fotos ni historial. */
     @Transactional
     public void eliminar(Long id) {
         Productor productor = buscar(id);
+        com.federa.backend.seguridad.AlcanceCentral.verificarSindicato(productor.getSindicato().getId());
+        com.federa.backend.seguridad.AlcanceCentral.limitar(productor.getSindicato().getCentral().getId());
+
+        if (vetoRepository.findByProductorIdAndVigenteIsTrue(id).isPresent()) {
+            throw new ReglaNegocioException(
+                    "No se puede eliminar a un productor vetado. Primero hay que levantar el veto.");
+        }
 
         // Un productor con lotes a su nombre no se borra: la tierra no
         // desaparece con él, y borrarlo dejaría parcelas sin dueño y sin
@@ -137,17 +168,88 @@ public class ProductorService {
                     + "Si se fue del sindicato, también podés deshabilitarlo en vez de borrarlo.",
                     productor.getNombreCompleto(), lotes));
         }
+        if (cargoRepository.findByProductorIdAndVigenteIsTrue(id).isPresent()) {
+            throw new ReglaNegocioException(
+                    "Primero hay que retirar al productor de su cargo vigente en el directorio.");
+        }
+        productor.setEliminadoEn(LocalDateTime.now());
+        productorRepository.flush();
+    }
 
-        // Sus fotos y, además, las firmas de los cargos que haya ocupado: dos
-        // orígenes distintos de archivos que apuntan a la misma persona.
+    public List<ProductorPapeleraResponse> listarPapelera() {
+        var alcance = com.federa.backend.seguridad.AlcanceCentral.actual();
+        Long centralId = com.federa.backend.seguridad.AlcanceCentral.limitar(null);
+        boolean limitarSindicatos = alcance != null && !alcance.todosSindicatos();
+        List<Long> sindicatos = limitarSindicatos
+                ? alcance.sindicatoIds().stream().toList() : List.of(-1L);
+        if (sindicatos.isEmpty()) sindicatos = List.of(-1L);
+        return productorRepository.listarPapelera(centralId, limitarSindicatos, sindicatos)
+                .stream().map(p -> ProductorPapeleraResponse.desde(p, puedeRestaurar(p)))
+                .toList();
+    }
+
+    @Transactional
+    public ProductorResponse restaurar(Long id) {
+        Productor productor = productorRepository.findEnPapeleraPorId(id)
+                .orElseThrow(() -> new RecursoNoEncontradoException("productor en papelera", id));
+        com.federa.backend.seguridad.AlcanceCentral.verificarSindicato(productor.getSindicato().getId());
+        com.federa.backend.seguridad.AlcanceCentral.limitar(productor.getSindicato().getCentral().getId());
+        if (!puedeRestaurar(productor)) {
+            throw new ReglaNegocioException(
+                    "No se puede restaurar: esa cédula ya fue registrada en otro productor. "
+                            + "La ficha permanece en la papelera.");
+        }
+        Long centralId = productor.getSindicato().getCentral().getId();
+        if (productor.getCorrelativo() != null && productorRepository.existeOtroCorrelativoActivo(
+                centralId, productor.getCorrelativo(), id)) {
+            productor.setCorrelativo(numerador.siguiente(centralId));
+        }
+        productor.setEliminadoEn(null);
+        productorRepository.flush();
+        return ProductorResponse.desde(productor);
+    }
+
+    /** Destruye exclusivamente una ficha que ya está en la papelera. */
+    @Transactional
+    public void eliminarDefinitivamente(Long id) {
+        Productor productor = productorRepository.findEnPapeleraPorId(id)
+                .orElseThrow(() -> new RecursoNoEncontradoException("productor en papelera", id));
+        com.federa.backend.seguridad.AlcanceCentral.verificarSindicato(productor.getSindicato().getId());
+        com.federa.backend.seguridad.AlcanceCentral.limitar(productor.getSindicato().getCentral().getId());
+
+        if (tenenciaRepository.countByProductorIdAndVigenteIsTrue(id) > 0
+                || vetoRepository.findByProductorIdAndVigenteIsTrue(id).isPresent()
+                || cargoRepository.findByProductorIdAndVigenteIsTrue(id).isPresent()) {
+            throw new ReglaNegocioException(
+                    "No se puede borrar definitivamente una ficha con lotes, vetos o cargos vigentes.");
+        }
+
         List<String> claves = new ArrayList<>(imagenRepository.findClavesPorProductor(id));
         claves.addAll(imagenCargoRepository.findClavesPorProductor(id));
         claves.addAll(imagenCargoRepository.findClavesOriginalesPorProductor(id));
 
+        // Estas dos relaciones no tienen cascada desde Productor. La eliminación
+        // definitiva incluye también las asistencias y el historial de tandas.
+        asistenciaRepository.eliminarPorProductor(id);
+        detalleGrupoRepository.eliminarPorProductor(id);
         productorRepository.delete(productor);
+        productorRepository.flush();
 
         if (!claves.isEmpty()) {
-            TransaccionArchivos.alConfirmar(() -> claves.forEach(almacen::borrar));
+            TransaccionArchivos.alConfirmar(() -> claves.stream().distinct().forEach(almacen::borrar));
+        }
+    }
+
+    private boolean puedeRestaurar(Productor productor) {
+        String ci = Textos.limpiar(productor.getCi());
+        return ci == null || !productorRepository.existeOtraCedulaActiva(ci, productor.getId());
+    }
+
+    private void impedirCedulaVetada(String ci) {
+        String limpia = Textos.limpiar(ci);
+        if (limpia != null && vetoRepository.existsByProductorCiAndVigenteIsTrue(limpia)) {
+            throw new ReglaNegocioException(
+                    "No se puede registrar esta cédula: pertenece a un productor vetado.");
         }
     }
 

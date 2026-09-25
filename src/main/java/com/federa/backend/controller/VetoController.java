@@ -2,9 +2,11 @@ package com.federa.backend.controller;
 
 import com.federa.backend.config.ApiRutas;
 import com.federa.backend.dto.LevantarVetoRequest;
+import com.federa.backend.dto.RegistrarProductorVetadoRequest;
 import com.federa.backend.dto.VetoRequest;
 import com.federa.backend.dto.VetoResponse;
 import com.federa.backend.service.VetoService;
+import com.federa.backend.service.RegistroProductorVetadoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,15 +21,18 @@ import java.util.List;
 @RestController
 @RequestMapping(ApiRutas.V1 + "/vetos")
 @Tag(name = "Vetos", description =
-        "Productores observados por decisión de asamblea. Mientras el veto rige, su "
-        + "credencial no se emite. Vetar y levantar son decisiones de reunión, y la reunión "
-        + "tiene que tener su acta cargada.")
+        "Productores bloqueados desde su sindicato. Mientras el veto rige no aparecen en "
+        + "el padrón normal, su cédula no puede registrarse nuevamente y su credencial no "
+        + "se emite. Los registros antiguos conservan la reunión que los respaldó.")
 public class VetoController {
 
     private final VetoService vetoService;
+    private final RegistroProductorVetadoService registroProductorVetadoService;
 
-    public VetoController(VetoService vetoService) {
+    public VetoController(VetoService vetoService,
+                          RegistroProductorVetadoService registroProductorVetadoService) {
         this.vetoService = vetoService;
+        this.registroProductorVetadoService = registroProductorVetadoService;
     }
 
     @GetMapping
@@ -70,8 +75,8 @@ public class VetoController {
     @PostMapping
     @Operation(summary = "Veta a un productor",
             description = """
-                    Devuelve 409 si la reunión no tiene el acta cargada, si falta el motivo, o \
-                    si esa persona ya tiene un veto abierto.
+                    Se administra directamente desde el sindicato. Devuelve 409 si falta el \
+                    motivo o si esa persona ya tiene un veto abierto.
 
                     A partir de acá su credencial no se emite y la vista previa dice que está \
                     observado. No se lo da de baja ni se lo borra: sigue siendo afiliado, con \
@@ -82,14 +87,23 @@ public class VetoController {
                 .body(creado);
     }
 
+    @PostMapping("/nuevo-productor")
+    @Operation(summary = "Registra una persona nueva directamente en vetados",
+            description = "Exige cédula, nombres, sindicato y motivo. Si la cédula ya existe, "
+                    + "se debe vetar al productor existente. El alta y el veto son atómicos.")
+    public ResponseEntity<VetoResponse> registrarYVetar(
+            @Valid @RequestBody RegistrarProductorVetadoRequest peticion) {
+        VetoResponse creado = registroProductorVetadoService.registrar(peticion);
+        return ResponseEntity.created(URI.create(ApiRutas.V1 + "/vetos/" + creado.id()))
+                .body(creado);
+    }
+
     @PutMapping("/{id}/levantar")
     @Operation(summary = "Lo saca de la lista de vetados",
             description = """
-                    Se decide en **otra** reunión, no en la que lo vetó, y esa reunión también \
-                    tiene que tener su acta cargada.
-
-                    Devuelve 409 si el veto ya estaba levantado, si la reunión es la misma que \
-                    lo vetó, o si le falta el acta.""")
+                    Se administra directamente desde el sindicato y conserva el motivo y la \
+                    fecha del levantamiento. Para registros históricos todavía se puede indicar \
+                    la reunión que tomó la decisión.""")
     public VetoResponse levantar(@PathVariable Long id,
                                  @Valid @RequestBody LevantarVetoRequest peticion) {
         return vetoService.levantar(id, peticion.reunionId(), peticion.motivo(),

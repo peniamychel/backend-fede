@@ -116,6 +116,38 @@ class CredencialServiceImpresionTest {
     }
 
     @Test
+    void vetoSinReunionPermitePreviaPeroImpideEmitirYContabilizar() {
+        var federacion = new com.federa.backend.model.Federacion();
+        federacion.setId(1L);
+        federacion.setNombre("CARRASCO TROPICAL");
+        var central = new com.federa.backend.model.Central();
+        central.setId(5L);
+        central.setNombre("CENTRAL");
+        central.setFederacion(federacion);
+        sindicato.setCentral(central);
+        var veto = new com.federa.backend.model.Veto();
+        veto.setMotivo("Veto registrado desde el sindicato");
+        veto.setDesde(java.time.LocalDate.of(2026, 9, 21));
+        when(productorRepository.findById(81L)).thenReturn(Optional.of(productor));
+        when(vetoService.vigenteDe(81L)).thenReturn(veto);
+
+        var previa = servicio.previa(81L);
+
+        assertThat(previa.nombreCompleto()).isEqualTo(productor.getNombreCompleto());
+        assertThat(previa.bloqueo().motivo()).isEqualTo(veto.getMotivo());
+        assertThat(previa.bloqueo().reunion()).isEmpty();
+        assertThat(previa.completa()).isFalse();
+        assertThatThrownBy(() -> servicio.generar(81L))
+                .isInstanceOf(com.federa.backend.exception.ReglaNegocioException.class)
+                .hasMessageContaining(veto.getMotivo());
+        assertThatThrownBy(() -> servicio.confirmarAnversoImpreso(81L))
+                .isInstanceOf(com.federa.backend.exception.ReglaNegocioException.class)
+                .hasMessageContaining(veto.getMotivo());
+        assertThat(productor.getCredencialImpresiones()).isEqualTo(2);
+        org.mockito.Mockito.verifyNoInteractions(generador, faseImpresionCarnetService);
+    }
+
+    @Test
     void revisarPuedeCancelarYVolverAConfirmarSinDuplicarConteos() {
         doReturn(panel).when(servicio).panelImpresionSindicato(13L);
         LocalDateTime enviada = LocalDateTime.of(2026, 9, 1, 9, 15);

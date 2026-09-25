@@ -35,7 +35,9 @@ public class CentralService {
         List<Central> centrales = federacionId != null
                 ? centralRepository.findByFederacionIdOrderByNombreAsc(federacionId)
                 : centralRepository.findAll(Sort.by("nombre"));
-        return centrales.stream().map(CentralResponse::desde).toList();
+        Long alcance = com.federa.backend.seguridad.AlcanceCentral.id();
+        return centrales.stream().filter(c -> alcance == null || alcance.equals(c.getId()))
+                .map(CentralResponse::desde).toList();
     }
 
     public CentralResponse obtener(Long id) {

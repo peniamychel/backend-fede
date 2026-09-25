@@ -15,7 +15,6 @@ import com.federa.backend.repository.LoteRepository;
 import com.federa.backend.repository.ProductorRepository;
 import com.federa.backend.repository.SindicatoRepository;
 import com.federa.backend.util.CodigoLote;
-import com.federa.backend.util.CodigoPadron;
 import com.federa.backend.util.Textos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -109,8 +108,7 @@ public class InformeSindicatoService {
                     nombresDe(productor),
                     apellidosDe(productor),
                     texto(productor.getCi()),
-                    unir(lotes.get(productor.getId())),
-                    texto(CodigoPadron.de(productor))));
+                    unir(lotes.get(productor.getId()))));
         }
         return filas;
     }

@@ -5,6 +5,9 @@ import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.servers.Server;
+import io.swagger.v3.oas.models.Components;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -13,6 +16,7 @@ import java.util.List;
 /** Metadatos de la documentación OpenAPI que sirve Swagger UI. */
 @Configuration
 public class OpenApiConfig {
+    public static final String SEGURIDAD_BEARER = "codigoAcceso";
 
     @Bean
     public OpenAPI apiPadronFedera() {
@@ -45,6 +49,14 @@ public class OpenApiConfig {
                                 tiene hijos colgando).""")
                         .contact(new Contact().name("FEDERA"))
                         .license(new License().name("Uso interno")))
+                .components(new Components().addSecuritySchemes(
+                        SEGURIDAD_BEARER,
+                        new SecurityScheme()
+                                .type(SecurityScheme.Type.HTTP)
+                                .scheme("bearer")
+                                .bearerFormat("JWT")
+                                .description("Token obtenido en POST /api/v1/auth/acceso")))
+                .addSecurityItem(new SecurityRequirement().addList(SEGURIDAD_BEARER))
                 .servers(List.of(new Server()
                         .url("http://localhost:8080")
                         .description("Entorno local")));

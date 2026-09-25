@@ -1,6 +1,7 @@
 package com.federa.backend.seguridad;
 
 import io.jsonwebtoken.Claims;
+import com.federa.backend.repository.SesionUsuarioRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,7 +15,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 
 /**
  * Lee el token de la cabecera {@code Authorization} y deja al usuario
@@ -31,9 +33,11 @@ public class JwtFiltro extends OncePerRequestFilter {
     private static final String PREFIJO = "Bearer ";
 
     private final JwtService jwtService;
+    private final SesionUsuarioRepository sesionRepository;
 
-    public JwtFiltro(JwtService jwtService) {
+    public JwtFiltro(JwtService jwtService, SesionUsuarioRepository sesionRepository) {
         this.jwtService = jwtService;
+        this.sesionRepository = sesionRepository;
     }
 
     @Override
@@ -53,16 +57,40 @@ public class JwtFiltro extends OncePerRequestFilter {
     }
 
     private void autenticar(HttpServletRequest peticion, Claims contenido) {
-        String rol = contenido.get("rol", String.class);
-        var autoridades = rol == null
-                ? List.<SimpleGrantedAuthority>of()
-                // Spring espera el prefijo ROLE_ para que funcione hasRole().
-                : List.of(new SimpleGrantedAuthority("ROLE_" + rol));
+        String sesionId = contenido.get("sid", String.class);
+        if (sesionId == null) return;
+        var sesion = sesionRepository
+                .findByIdAndRevocadaFalseAndExpiraEnAfter(sesionId, LocalDateTime.now())
+                .orElse(null);
+        if (sesion == null || !sesion.getUsuario().isEstado()) return;
+
+        var autoridades = new ArrayList<SimpleGrantedAuthority>();
+        sesion.getUsuario().getRolesAcceso().stream()
+                .filter(r -> r.isEstado())
+                .forEach(rol -> {
+                    autoridades.add(new SimpleGrantedAuthority("ROLE_" + rol.getCodigo()));
+                });
+        if (sesion.getUsuario().isPermisosPersonalizados()) autoridades.clear();
+        AutorizacionesUsuario.permisos(sesion.getUsuario()).forEach(p -> autoridades.add(new SimpleGrantedAuthority(p)));
+        // Compatibilidad con usuarios anteriores a los roles configurables.
+        if (sesion.getUsuario().getRolesAcceso().isEmpty()
+                && !sesion.getUsuario().isPermisosPersonalizados() && sesion.getUsuario().getRol() != null) {
+            autoridades.add(new SimpleGrantedAuthority("ROLE_" + sesion.getUsuario().getRol()));
+        }
+
+        var central = sesion.getUsuario().getCentralAcceso();
+        if (central != null) {
+            autoridades.removeIf(a -> !AlcanceCentral.PERMISOS.contains(a.getAuthority()));
+        }
 
         var autenticacion = new UsernamePasswordAuthenticationToken(
-                contenido.getSubject(), null, autoridades);
+                sesion.getUsuario().getNombreUsuario(), null, autoridades);
         autenticacion.setDetails(
                 new WebAuthenticationDetailsSource().buildDetails(peticion));
+        if (central != null) autenticacion.setDetails(
+                new AlcanceCentral.Datos(central.getId(), central.getFederacion().getId(),
+                        sesion.getUsuario().isTodosSindicatos(), sesion.getUsuario().getSindicatosAcceso().stream()
+                        .map(s -> s.getId()).collect(java.util.stream.Collectors.toSet())));
 
         SecurityContextHolder.getContext().setAuthentication(autenticacion);
     }

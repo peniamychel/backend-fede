@@ -10,6 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,23 +24,27 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SeguridadConfig {
 
     private static final Logger log = LoggerFactory.getLogger(SeguridadConfig.class);
 
     private final JwtFiltro jwtFiltro;
     private final PuntoDeEntradaNoAutorizado puntoDeEntrada;
+    private final AccesoDenegadoJson accesoDenegado;
     private final boolean exigirAutenticacion;
     private final List<String> origenesPermitidos;
 
     public SeguridadConfig(
             JwtFiltro jwtFiltro,
             PuntoDeEntradaNoAutorizado puntoDeEntrada,
+            AccesoDenegadoJson accesoDenegado,
             @Value("${federa.seguridad.exigir-autenticacion:false}") boolean exigirAutenticacion,
             @Value("${federa.seguridad.origenes:http://localhost:5173}")
             List<String> origenesPermitidos) {
         this.jwtFiltro = jwtFiltro;
         this.puntoDeEntrada = puntoDeEntrada;
+        this.accesoDenegado = accesoDenegado;
         this.exigirAutenticacion = exigirAutenticacion;
         this.origenesPermitidos = origenesPermitidos;
     }
@@ -73,9 +78,9 @@ public class SeguridadConfig {
                 // petición cruzada que falsificar, así que CSRF no aplica.
                 .csrf(csrf -> csrf.disable())
 
-                // Sin sesión en el servidor: cada petición se autentica sola
-                // con su token. Es lo que permite reiniciar el backend o correr
-                // varias instancias sin desloguear a nadie.
+                // No se usa la HttpSession de Spring: cada petición presenta
+                // el token y se comprueba también su sesión revocable en BD.
+                // Esto sigue permitiendo reinicios y varias instancias.
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 .authorizeHttpRequests(this::rutas)
@@ -83,7 +88,8 @@ public class SeguridadConfig {
                 // Sin esto, una petición sin token recibe 403 en vez de 401 y
                 // el cliente no puede distinguir "iniciá sesión" de "no tenés
                 // permiso".
-                .exceptionHandling(e -> e.authenticationEntryPoint(puntoDeEntrada))
+                .exceptionHandling(e -> e.authenticationEntryPoint(puntoDeEntrada)
+                        .accessDeniedHandler(accesoDenegado))
 
                 .addFilterBefore(jwtFiltro, UsernamePasswordAuthenticationFilter.class);
 
@@ -97,7 +103,7 @@ public class SeguridadConfig {
 
         registro
                 // Iniciar sesión no puede exigir estar autenticado.
-                .requestMatchers(ApiRutas.V1 + "/auth/**").permitAll()
+                .requestMatchers(HttpMethod.POST, ApiRutas.V1 + "/auth/acceso").permitAll()
 
                 // La documentación queda abierta en desarrollo.
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
@@ -117,11 +123,178 @@ public class SeguridadConfig {
                 // corto en el parámetro, no exigir la cabecera.
                 .requestMatchers(HttpMethod.GET, ApiRutas.V1 + "/archivos/**").permitAll();
 
+        // Las plantillas son fondos institucionales sin datos personales. Se
+        // cargan mediante <img>, y el navegador no adjunta el token Bearer en
+        // esa petición. La configuración y su edición continúan protegidas.
+        registro.requestMatchers(HttpMethod.GET,
+                        ApiRutas.V1 + "/configuracion/credencial/plantilla/*")
+                .permitAll();
+
         // Los respaldos contienen toda la base de datos. Se protegen incluso
         // mientras el resto del padrón siga en el modo transitorio sin exigir
         // autenticación global.
         registro.requestMatchers(ApiRutas.V1 + "/administracion/backups/**")
-                .hasRole("ADMIN");
+                .hasAnyAuthority("RESPALDOS_ADMINISTRAR", "ROLE_ADMIN");
+        registro.requestMatchers(ApiRutas.V1 + "/administracion/accesos/**")
+                .hasAnyAuthority("USUARIOS_ADMINISTRAR", "ROLE_ADMIN");
+
+        // Estos GET no son una simple consulta: generan el documento que se
+        // envía a la impresora. Deben ir antes de la regla general de lectura
+        // de productores.
+        registro.requestMatchers(HttpMethod.GET,
+                        ApiRutas.V1 + "/productores/*/credencial.pdf",
+                        ApiRutas.V1 + "/cargos/*/credencial.pdf")
+                .hasAnyAuthority("CARNETS_IMPRIMIR", "ROLE_ADMIN");
+
+        // Separar lectura de edición es importante: un usuario de consulta
+        // debe poder ver fotos, directorios y el diseño aplicado al carnet sin
+        // recibir permiso para reemplazarlos. Las reglas de escritura más
+        // abajo siguen exigiendo el permiso específico.
+        registro.requestMatchers(HttpMethod.GET, ApiRutas.V1 + "/productores/**")
+                .hasAnyAuthority("PRODUCTORES_VER", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.GET,
+                        ApiRutas.V1 + "/cargos/*/imagenes/**",
+                        ApiRutas.V1 + "/sindicatos/*/lista-fisica/**",
+                        ApiRutas.V1 + "/sindicatos/*/directorio/**",
+                        ApiRutas.V1 + "/centrales/*/directorio/**",
+                        ApiRutas.V1 + "/federaciones/*/directorio/**")
+                .hasAnyAuthority("PRODUCTORES_VER", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.GET, ApiRutas.V1 + "/configuracion/credencial/**")
+                .hasAnyAuthority("PRODUCTORES_VER", "CARNETS_IMPRIMIR",
+                        "CARNETS_DISENO", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.GET, ApiRutas.V1 + "/centrales/*/fases-impresion/**")
+                .hasAnyAuthority("INFORMES_DESCARGAR", "CARNETS_IMPRIMIR",
+                        "FASES_GESTIONAR", "ROLE_ADMIN");
+        // El estado se consulta también desde Android y web, donde no existe
+        // impresión física. Generar caras/reversos y confirmar tandas continúa
+        // protegido por la regla amplia de CARNETS_IMPRIMIR de más abajo.
+        registro.requestMatchers(HttpMethod.GET,
+                        ApiRutas.V1 + "/sindicatos/*/credenciales/impresion")
+                .hasAnyAuthority("PRODUCTORES_VER", "INFORMES_DESCARGAR", "ROLE_ADMIN");
+
+        // Operaciones sensibles. El orden importa: las rutas particulares van
+        // antes que la regla general de productores.
+        registro.requestMatchers(ApiRutas.V1 + "/conciliaciones-udestro/**")
+                .hasAnyAuthority("CONCILIAR_UDESTRO", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.POST, ApiRutas.V1 + "/importaciones/**")
+                .hasAnyAuthority("IMPORTAR_PADRON", "ROLE_ADMIN");
+        registro.requestMatchers(ApiRutas.V1 + "/personas/**",
+                        ApiRutas.V1 + "/productores/*/revision-sie/**",
+                        ApiRutas.V1 + "/productores/*/verificacion-sie/**")
+                .hasAnyAuthority("SIE_REVISAR", "ROLE_ADMIN");
+        registro.requestMatchers(ApiRutas.V1 + "/productores/*/credencial/impresion",
+                        ApiRutas.V1 + "/productores/*/fase-impresion/**")
+                .hasAnyAuthority("CARNETS_IMPRIMIR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PATCH, ApiRutas.V1 + "/productores/*/observacion")
+                .hasAnyAuthority("PRODUCTORES_OBSERVAR", "PRODUCTORES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PUT, ApiRutas.V1 + "/productores/*/numero-lote")
+                .hasAnyAuthority("NUMERO_LOTE_EDITAR", "LOTES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.POST, ApiRutas.V1 + "/productores/*/imagenes")
+                .hasAnyAuthority("FOTOS_PRODUCTORES_EDITAR", "IMAGENES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.DELETE, ApiRutas.V1 + "/productores/*/imagenes")
+                .hasAnyAuthority("FOTOS_PRODUCTORES_EDITAR", "IMAGENES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(ApiRutas.V1 + "/productores/*/observacion",
+                        ApiRutas.V1 + "/productores/*/confirmar-correccion-nombre")
+                .hasAnyAuthority("PRODUCTORES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.POST, ApiRutas.V1 + "/configuracion/credencial/**")
+                .hasAnyAuthority("CARNETS_DISENO", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PUT, ApiRutas.V1 + "/configuracion/credencial/**")
+                .hasAnyAuthority("CARNETS_DISENO", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PATCH, ApiRutas.V1 + "/configuracion/credencial/**")
+                .hasAnyAuthority("CARNETS_DISENO", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.DELETE, ApiRutas.V1 + "/configuracion/credencial/**")
+                .hasAnyAuthority("CARNETS_DISENO", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.POST, ApiRutas.V1 + "/centrales/*/fases-impresion/**")
+                .hasAnyAuthority("FASES_GESTIONAR", "ROLE_ADMIN");
+        registro.requestMatchers(ApiRutas.V1 + "/sindicatos/*/credenciales/impresion/**")
+                .hasAnyAuthority("CARNETS_IMPRIMIR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.GET, ApiRutas.V1 + "/sindicatos/*/informes/**")
+                .hasAnyAuthority("INFORMES_DESCARGAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.GET, ApiRutas.V1 + "/centrales/*/credenciales/impresion")
+                .hasAnyAuthority("PRODUCTORES_VER", "INFORMES_DESCARGAR", "ROLE_ADMIN");
+        registro.requestMatchers(ApiRutas.V1 + "/centrales/*/credenciales/impresion/**")
+                .hasAnyAuthority("INFORMES_DESCARGAR", "ROLE_ADMIN");
+        registro.requestMatchers(ApiRutas.V1 + "/federaciones/*/credenciales/impresion/**",
+                        ApiRutas.V1 + "/sindicatos/*/informe.pdf")
+                .hasAnyAuthority("INFORMES_DESCARGAR", "ROLE_ADMIN");
+        registro.requestMatchers(ApiRutas.V1 + "/sindicatos/*/credenciales.pdf")
+                .hasAnyAuthority("CARNETS_IMPRIMIR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.GET, ApiRutas.V1 + "/productores/papelera")
+                .hasAnyAuthority("PRODUCTORES_ELIMINAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.POST, ApiRutas.V1 + "/productores/papelera/*/restaurar")
+                .hasAnyAuthority("PRODUCTORES_ELIMINAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.DELETE, ApiRutas.V1 + "/productores/papelera/*")
+                .hasAnyAuthority("PRODUCTORES_ELIMINAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.DELETE, ApiRutas.V1 + "/productores/*")
+                .hasAnyAuthority("PRODUCTORES_ELIMINAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.POST, ApiRutas.V1 + "/productores")
+                .hasAnyAuthority("PRODUCTORES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PUT, ApiRutas.V1 + "/productores/*")
+                .hasAnyAuthority("PRODUCTORES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PATCH, ApiRutas.V1 + "/productores/*")
+                .hasAnyAuthority("PRODUCTORES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.POST, ApiRutas.V1 + "/productores/*/imagenes/**",
+                        ApiRutas.V1 + "/cargos/*/imagenes/**",
+                        ApiRutas.V1 + "/sindicatos/*/lista-fisica/**")
+                .hasAnyAuthority("IMAGENES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PUT, ApiRutas.V1 + "/productores/*/imagenes/**",
+                        ApiRutas.V1 + "/cargos/*/imagenes/**",
+                        ApiRutas.V1 + "/sindicatos/*/lista-fisica/**")
+                .hasAnyAuthority("IMAGENES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PATCH, ApiRutas.V1 + "/productores/*/imagenes/**",
+                        ApiRutas.V1 + "/cargos/*/imagenes/**",
+                        ApiRutas.V1 + "/sindicatos/*/lista-fisica/**")
+                .hasAnyAuthority("IMAGENES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.DELETE, ApiRutas.V1 + "/productores/*/imagenes/**",
+                        ApiRutas.V1 + "/cargos/*/imagenes/**",
+                        ApiRutas.V1 + "/sindicatos/*/lista-fisica/**")
+                .hasAnyAuthority("IMAGENES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.POST, ApiRutas.V1 + "/vetos/**")
+                .hasAnyAuthority("PRODUCTORES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PUT, ApiRutas.V1 + "/vetos/**")
+                .hasAnyAuthority("PRODUCTORES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.POST, ApiRutas.V1 + "/sindicatos/*/directorio/**",
+                        ApiRutas.V1 + "/centrales/*/directorio/**",
+                        ApiRutas.V1 + "/federaciones/*/directorio/**",
+                        ApiRutas.V1 + "/cargos/*/pie-firma")
+                .hasAnyAuthority("DIRECTORIOS_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PUT, ApiRutas.V1 + "/sindicatos/*/directorio/**",
+                        ApiRutas.V1 + "/centrales/*/directorio/**",
+                        ApiRutas.V1 + "/federaciones/*/directorio/**",
+                        ApiRutas.V1 + "/cargos/*/pie-firma")
+                .hasAnyAuthority("DIRECTORIOS_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PATCH, ApiRutas.V1 + "/sindicatos/*/directorio/**",
+                        ApiRutas.V1 + "/centrales/*/directorio/**",
+                        ApiRutas.V1 + "/federaciones/*/directorio/**",
+                        ApiRutas.V1 + "/cargos/*/pie-firma")
+                .hasAnyAuthority("DIRECTORIOS_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.DELETE, ApiRutas.V1 + "/sindicatos/*/directorio/**",
+                        ApiRutas.V1 + "/centrales/*/directorio/**",
+                        ApiRutas.V1 + "/federaciones/*/directorio/**",
+                        ApiRutas.V1 + "/cargos/*/pie-firma")
+                .hasAnyAuthority("DIRECTORIOS_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.POST, ApiRutas.V1 + "/lotes/**", ApiRutas.V1 + "/sistemas/**")
+                .hasAnyAuthority("LOTES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PUT, ApiRutas.V1 + "/lotes/**", ApiRutas.V1 + "/sistemas/**")
+                .hasAnyAuthority("LOTES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.DELETE, ApiRutas.V1 + "/lotes/**", ApiRutas.V1 + "/sistemas/**")
+                .hasAnyAuthority("LOTES_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.POST, ApiRutas.V1 + "/reuniones/**", ApiRutas.V1 + "/llamadas/**")
+                .hasAnyAuthority("REUNIONES_GESTIONAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PUT, ApiRutas.V1 + "/reuniones/**", ApiRutas.V1 + "/llamadas/**")
+                .hasAnyAuthority("REUNIONES_GESTIONAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PATCH, ApiRutas.V1 + "/reuniones/**", ApiRutas.V1 + "/llamadas/**")
+                .hasAnyAuthority("REUNIONES_GESTIONAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.DELETE, ApiRutas.V1 + "/reuniones/**", ApiRutas.V1 + "/llamadas/**")
+                .hasAnyAuthority("REUNIONES_GESTIONAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.POST, ApiRutas.V1 + "/centrales", ApiRutas.V1 + "/sindicatos", ApiRutas.V1 + "/federaciones")
+                .hasAnyAuthority("JERARQUIA_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PUT, ApiRutas.V1 + "/centrales/**", ApiRutas.V1 + "/sindicatos/**", ApiRutas.V1 + "/federaciones/**")
+                .hasAnyAuthority("JERARQUIA_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.PATCH, ApiRutas.V1 + "/centrales/**", ApiRutas.V1 + "/sindicatos/**", ApiRutas.V1 + "/federaciones/**")
+                .hasAnyAuthority("JERARQUIA_EDITAR", "ROLE_ADMIN");
+        registro.requestMatchers(HttpMethod.DELETE, ApiRutas.V1 + "/centrales/**", ApiRutas.V1 + "/sindicatos/**", ApiRutas.V1 + "/federaciones/**")
+                .hasAnyAuthority("JERARQUIA_EDITAR", "ROLE_ADMIN");
 
         if (exigirAutenticacion) {
             registro.anyRequest().authenticated();

@@ -22,25 +22,23 @@ import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 
 /**
- * Dibuja el informe de un sindicato, con el formato de la nómina que la
- * federación venía imprimiendo desde Excel.
+ * Dibuja la nómina de un sindicato en el formato vertical de los informes.
  * <p>
  * Es un componente sin estado: recibe un {@link InformeSindicato} ya armado y
  * devuelve los bytes del PDF. No consulta nada, así que se puede probar con
  * datos inventados y sin base de datos.
  * <p>
- * Se imprime en carta apaisada porque son siete columnas y en vertical la de
- * observaciones queda inservible.
+ * La columna de observaciones queda libre para anotaciones manuales.
  */
 @Component
 public class InformeSindicatoPdf {
 
-    /** Carta apaisada: 792 × 612 puntos. */
-    private static final Rectangle HOJA = PageSize.LETTER.rotate();
+    /** Carta vertical: 612 × 792 puntos. */
+    private static final Rectangle HOJA = PageSize.LETTER;
 
     private static final float MARGEN_LATERAL = 30f;
     /** Deja sitio al encabezado, que se dibuja fuera del área de contenido. */
-    private static final float MARGEN_SUPERIOR = 96f;
+    private static final float MARGEN_SUPERIOR = 112f;
     /** Ídem para el pie de página. */
     private static final float MARGEN_INFERIOR = 44f;
 
@@ -48,7 +46,7 @@ public class InformeSindicatoPdf {
     private static final float ANCHO_TOTAL = 16f;
 
     private static final Color GRIS_LINEA = new Color(150, 150, 150);
-    private static final Color GRIS_ENCABEZADO = new Color(224, 224, 224);
+    private static final Color GRIS_ENCABEZADO = new Color(235, 235, 235);
     private static final Color GRIS_TEXTO = new Color(90, 90, 90);
 
     private static final Font TITULO = fuente(14, Font.BOLD, Color.BLACK);
@@ -61,13 +59,12 @@ public class InformeSindicatoPdf {
     private static final Font FIRMA = fuente(9, Font.BOLD, Color.BLACK);
 
     /**
-     * Encabezados de la tabla y ancho de cada columna en puntos. Suman los 732
+     * Encabezados de la tabla y ancho de cada columna en puntos. Suman los 552
      * que quedan entre los márgenes; si se toca uno hay que compensar en otro.
      */
     private static final String[] COLUMNAS = {
-            "N°", "NOMBRE COMPLETO", "APELLIDOS", "C.I.",
-            "N° LOTE", "CÓDIGO", "OBSERVACIONES"};
-    private static final float[] ANCHOS = {26f, 108f, 140f, 66f, 52f, 70f, 270f};
+            "N°", "NOMBRES", "APELLIDOS", "C.I.", "N° LOTE", "OBSERVACIONES"};
+    private static final float[] ANCHOS = {26f, 105f, 120f, 65f, 52f, 184f};
 
     /**
      * Genera el PDF completo.
@@ -132,13 +129,7 @@ public class InformeSindicatoPdf {
             tabla.addCell(dato(fila.apellidos(), Element.ALIGN_LEFT));
             tabla.addCell(dato(fila.ci(), Element.ALIGN_LEFT));
             tabla.addCell(dato(fila.lotes(), Element.ALIGN_CENTER));
-            // Donde antes iba el carné de productor. La columna se conserva
-            // porque una nómina necesita identificar a cada uno con algo corto;
-            // lo que cambió es con qué.
-            tabla.addCell(dato(fila.codigoPadron(), Element.ALIGN_CENTER));
-            // La columna queda en blanco a propósito. El sistema ya no guarda
-            // observaciones, pero la nómina se imprime y se reparte en papel, y
-            // ahí el espacio para anotar a mano es justamente para lo que sirve.
+            // Espacio para anotar a mano: no se imprimen observaciones del sistema.
             tabla.addCell(dato("", Element.ALIGN_LEFT));
         }
         return tabla;
@@ -314,14 +305,15 @@ public class InformeSindicatoPdf {
             float derecha = HOJA.getWidth() - MARGEN_LATERAL;
             float alto = HOJA.getHeight();
 
-            centrado(lienzo, informe.federacion(), TITULO, alto - 34f);
-            izquierda(lienzo, "CENTRAL: ", informe.central(), alto - 58f);
-            izquierda(lienzo, "SINDICATO: ", informe.sindicato(), alto - 76f);
+            centrado(lienzo, "NÓMINA DE PRODUCTORES", TITULO, alto - 35f);
+            centrado(lienzo, informe.federacion() + " · CENTRAL " + informe.central(),
+                    ETIQUETA, alto - 54f);
+            centrado(lienzo, "SINDICATO: " + informe.sindicato(), ETIQUETA, alto - 69f);
 
             // Los dos números que la federación todavía asigna a mano: se
             // imprime el rótulo con la raya y se llenan con lapicera.
-            izquierdaEn(lienzo, "N° FEDERACIÓN: _______________", 545f, alto - 58f);
-            izquierdaEn(lienzo, "N° CENTRAL: _______________", 545f, alto - 76f);
+            izquierdaEn(lienzo, "N° FEDERACIÓN: _______________", MARGEN_LATERAL, alto - 88f);
+            izquierdaEn(lienzo, "N° CENTRAL: _______________", 310f, alto - 88f);
 
             centrado(lienzo, informe.sindicato(), PIE, 26f);
             // "Página N de" y el total se dibujan por separado, porque el
@@ -345,13 +337,6 @@ public class InformeSindicatoPdf {
         private void centrado(PdfContentByte lienzo, String texto, Font fuente, float y) {
             ColumnText.showTextAligned(lienzo, Element.ALIGN_CENTER,
                     new Phrase(texto, fuente), HOJA.getWidth() / 2f, y, 0f);
-        }
-
-        private void izquierda(PdfContentByte lienzo, String rotulo, String valor, float y) {
-            Phrase linea = new Phrase();
-            linea.add(new Phrase(rotulo, ETIQUETA));
-            linea.add(new Phrase(valor, CAMPO));
-            ColumnText.showTextAligned(lienzo, Element.ALIGN_LEFT, linea, MARGEN_LATERAL, y, 0f);
         }
 
         private void izquierdaEn(PdfContentByte lienzo, String texto, float x, float y) {

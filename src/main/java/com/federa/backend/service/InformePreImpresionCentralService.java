@@ -63,6 +63,35 @@ public class InformePreImpresionCentralService {
         return new Descarga(archivo, generadorRevisionPadronPdf.generar(informe));
     }
 
+    /** Reutiliza el informe de la central, pero con una única sección. */
+    public Descarga descargarRevisionPadronSindicatoPdf(Long sindicatoId) {
+        InformePreImpresionCentral informe = informeSindicato(sindicatoId);
+        String archivo = "revision-padron-"
+                + Textos.paraNombreDeArchivo(informe.central(), 30) + "-"
+                + Textos.paraNombreDeArchivo(informe.sindicatos().get(0).sindicato(), 40) + ".pdf";
+        return new Descarga(archivo, generadorRevisionPadronPdf.generar(informe));
+    }
+
+    public Descarga descargarPreImpresionSindicatoPdf(Long sindicatoId) {
+        InformePreImpresionCentral informe = informeSindicato(sindicatoId);
+        String archivo = "informe-pre-impresion-"
+                + Textos.paraNombreDeArchivo(informe.central(), 30) + "-"
+                + Textos.paraNombreDeArchivo(informe.sindicatos().get(0).sindicato(), 40) + ".pdf";
+        return new Descarga(archivo, generadorPdf.generar(informe));
+    }
+
+    private InformePreImpresionCentral informeSindicato(Long sindicatoId) {
+        Sindicato sindicato = sindicatoRepository.findById(sindicatoId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("sindicato", sindicatoId));
+        com.federa.backend.seguridad.AlcanceCentral.verificarSindicato(sindicatoId);
+        Central central = sindicato.getCentral();
+        com.federa.backend.seguridad.AlcanceCentral.limitar(central.getId());
+        InformePreImpresionCentral.SeccionSindicato seccion = seccion(sindicato);
+        return new InformePreImpresionCentral(
+                central.getId(), central.getNombre(), central.getFederacion().getNombre(),
+                seccion.productores().size(), List.of(seccion));
+    }
+
     private InformePreImpresionCentral.SeccionSindicato seccion(Sindicato sindicato) {
         CredencialService.EstadoRevisionDatosSindicato estado = credencialService
                 .estadoRevisionDatosSindicato(sindicato.getId());

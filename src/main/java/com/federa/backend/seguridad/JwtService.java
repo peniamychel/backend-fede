@@ -20,9 +20,9 @@ import java.util.Date;
  * Emite y valida los tokens de sesión.
  * <p>
  * Un JWT es un texto firmado que dice quién es el portador y hasta cuándo vale.
- * El servidor no guarda sesiones: verifica la firma y confía en el contenido,
- * y por eso la clave de firma es lo único que separa un token legítimo de uno
- * inventado.
+ * La firma demuestra que el token fue emitido por este servidor. Además, cada
+ * token lleva el id de una sesión guardada en la base de datos; así se puede
+ * cerrar o revocar inmediatamente sin esperar a que venza el JWT.
  */
 @Service
 public class JwtService {
@@ -71,10 +71,11 @@ public class JwtService {
     }
 
     /** Token para ese usuario, válido por la duración configurada. */
-    public String generar(Usuario usuario) {
+    public String generar(Usuario usuario, String sesionId) {
         Date ahora = new Date();
         return Jwts.builder()
                 .subject(usuario.getNombreUsuario())
+                .claim("sid", sesionId)
                 .claim("rol", usuario.getRol())
                 .claim("nombre", usuario.getNombreCompleto())
                 .issuedAt(ahora)

@@ -52,14 +52,21 @@ class InformeImpresionCentralServiceTest {
         Central central = Central.builder().id(13L).nombre("13 DE JUNIO")
                 .federacion(federacion).build();
         Sindicato primero = Sindicato.builder().id(1L).nombre("1RO DE MAYO")
-                .selloClave("sellos/1ro-de-mayo.png").build();
-        Sindicato segundo = Sindicato.builder().id(2L).nombre("NUEVA ESPERANZA").build();
+                .central(central).selloClave("sellos/1ro-de-mayo.png").build();
+        Sindicato segundo = Sindicato.builder().id(2L).nombre("NUEVA ESPERANZA")
+                .central(central).build();
         when(centrales.findById(13L)).thenReturn(Optional.of(central));
+        when(sindicatos.findById(1L)).thenReturn(Optional.of(primero));
         when(sindicatos.findByCentralIdOrderByNombreAsc(13L))
                 .thenReturn(List.of(primero, segundo));
         List<Productor> padron = productoresParaInforme(primero, segundo);
-        when(productores.findBySindicatoCentralIdOrderByApellidosAscNombresAsc(13L))
-                .thenReturn(padron);
+        // El productor 11 está vetado: la consulta nueva no lo devuelve,
+        // aunque figure en el historial de una fase anterior.
+        List<Productor> padronVisible = padron.stream()
+                .filter(productor -> productor.getId() != 11L)
+                .toList();
+        when(productores.findNoVetadosByCentralIdOrderByApellidosAscNombresAsc(13L))
+                .thenReturn(padronVisible);
         TenenciaLote sistemaPorParcela = new TenenciaLote();
         sistemaPorParcela.setProductor(padron.get(0));
         sistemaPorParcela.setLote(Lote.builder().estadoLote(EstadoLote.CON_SISTEMA).build());
@@ -79,27 +86,27 @@ class InformeImpresionCentralServiceTest {
         when(credenciales.panelImpresionSindicato(1L)).thenReturn(
                 panel(1L, primero.getNombre(), 10, 4, 5, 1, 3));
         when(credenciales.panelImpresionSindicato(2L)).thenReturn(
-                panel(2L, segundo.getNombre(), 6, 3, 1, 2, 1));
+                panel(2L, segundo.getNombre(), 5, 2, 1, 2, 1));
 
         InformeImpresionCentralService servicio = new InformeImpresionCentralService(
                 centrales, sindicatos, productores, tenencias, fases, participantes, credenciales,
                 mock(InformeImpresionCentralPdf.class));
         InformeImpresionCentral informe = servicio.obtener(13L);
 
-        assertThat(informe.total()).isEqualTo(16);
-        assertThat(informe.impresos()).isEqualTo(7);
+        assertThat(informe.total()).isEqualTo(15);
+        assertThat(informe.impresos()).isEqualTo(6);
         assertThat(informe.pendientes()).isEqualTo(9);
         assertThat(informe.pendientesConFoto()).isEqualTo(6);
         assertThat(informe.sinFoto()).isEqualTo(3);
         assertThat(informe.listosParaImprimir()).isEqualTo(4);
-        assertThat(informe.observados()).isEqualTo(3);
-        assertThat(informe.sistema()).isEqualTo(8);
+        assertThat(informe.observados()).isEqualTo(2);
+        assertThat(informe.sistema()).isEqualTo(7);
         assertThat(informe.sinSistema()).isEqualTo(8);
         assertThat(informe.sindicatosSinSello()).isEqualTo(1);
         assertThat(informe.detalle()).extracting(
                 InformeImpresionCentral.FilaSindicato::selloCargado)
                 .containsExactly(true, false);
-        assertThat(informe.porcentajeAvance()).isEqualTo(43.8);
+        assertThat(informe.porcentajeAvance()).isEqualTo(40.0);
         assertThat(informe.detalle()).extracting(InformeImpresionCentral.FilaSindicato::sindicato)
                 .containsExactly("1RO DE MAYO", "NUEVA ESPERANZA");
         assertThat(informe.detalle().get(0).porcentajeAvance()).isEqualTo(40.0);
@@ -111,13 +118,30 @@ class InformeImpresionCentralServiceTest {
                 .containsExactly(1, 2);
         assertThat(informe.avancesFase()).extracting(
                 InformeImpresionCentral.AvanceFase::porcentajeAvance)
-                .containsExactly(12.5, 43.8);
+                .containsExactly(6.7, 40.0);
         assertThat(informe.detalle().get(0).avancesFase()).extracting(
                 InformeImpresionCentral.AvanceFase::porcentajeAvance)
                 .containsExactly(10.0, 40.0);
         assertThat(informe.detalle().get(1).avancesFase()).extracting(
                 InformeImpresionCentral.AvanceFase::porcentajeAvance)
-                .containsExactly(16.7, 50.0);
+                .containsExactly(0.0, 40.0);
+        assertThat(servicio.obtenerSindicato(1L).total()).isEqualTo(10);
+        assertThat(servicio.obtenerSindicato(1L).impresos()).isEqualTo(4);
+        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                "fotos", null, List.of());
+        auth.setDetails(new com.federa.backend.seguridad.AlcanceCentral.Datos(
+                13L, 1L, false, java.util.Set.of(1L)));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+        try {
+            var limitado = servicio.obtener(13L);
+            assertThat(limitado.total()).isEqualTo(10);
+            assertThat(limitado.impresos()).isEqualTo(4);
+            assertThat(limitado.detalle()).hasSize(1);
+            assertThat(limitado.avancesFase()).extracting(
+                    InformeImpresionCentral.AvanceFase::porcentajeAvance).containsExactly(10.0, 40.0);
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
     }
 
     @Test

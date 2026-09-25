@@ -61,11 +61,16 @@ public class InformeImpresionCentralService {
     }
 
     public InformeImpresionCentral obtener(Long centralId) {
+        com.federa.backend.seguridad.AlcanceCentral.limitar(centralId);
         Central central = centralRepository.findById(centralId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("central", centralId));
-        List<Sindicato> sindicatos = sindicatoRepository.findByCentralIdOrderByNombreAsc(centralId);
+        List<Sindicato> sindicatos = sindicatoRepository.findByCentralIdOrderByNombreAsc(centralId).stream()
+                .filter(s -> com.federa.backend.seguridad.AlcanceCentral.permiteSindicato(s.getId())).toList();
         List<InformeImpresionCentral.FilaSindicato> detalle = new ArrayList<>(sindicatos.size());
-        Map<Long, EstadisticasProductores> estadisticas = estadisticasProductores(centralId);
+        List<Productor> productoresComputables = productorRepository
+                .findNoVetadosByCentralIdOrderByApellidosAscNombresAsc(centralId);
+        Map<Long, EstadisticasProductores> estadisticas = estadisticasProductores(
+                productoresComputables);
         Map<Long, CredencialService.PanelImpresionSindicato> paneles = new LinkedHashMap<>();
         Map<Long, Integer> totalesPorSindicato = new LinkedHashMap<>();
         Map<Long, Integer> impresosActualesPorSindicato = new LinkedHashMap<>();
@@ -76,8 +81,11 @@ public class InformeImpresionCentralService {
             totalesPorSindicato.put(sindicato.getId(), panel.total());
             impresosActualesPorSindicato.put(sindicato.getId(), panel.impresos());
         }
+        Set<Long> productoresComputablesIds = productoresComputables.stream()
+                .map(Productor::getId).collect(Collectors.toSet());
         AvancesPorFase avances = avancesPorFase(
-                centralId, totalesPorSindicato, impresosActualesPorSindicato);
+                centralId, totalesPorSindicato, impresosActualesPorSindicato,
+                productoresComputablesIds);
 
         int total = 0;
         int impresos = 0;
@@ -122,13 +130,27 @@ public class InformeImpresionCentralService {
                 List.copyOf(detalle));
     }
 
+    /** El mismo cálculo del consolidado, limitado al sindicato autorizado. */
+    public InformeImpresionCentral.FilaSindicato obtenerSindicato(Long sindicatoId) {
+        Sindicato sindicato = sindicatoRepository.findById(sindicatoId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("sindicato", sindicatoId));
+        com.federa.backend.seguridad.AlcanceCentral.verificarSindicato(sindicatoId);
+        Long centralId = sindicato.getCentral().getId();
+        com.federa.backend.seguridad.AlcanceCentral.limitar(centralId);
+        return obtener(centralId).detalle().stream()
+                .filter(fila -> fila.sindicatoId().equals(sindicatoId))
+                .findFirst()
+                .orElseThrow(() -> new RecursoNoEncontradoException("sindicato", sindicatoId));
+    }
+
     /**
      * Calcula el avance acumulado. Una reimpresión no aumenta el numerador:
      * cada productor cuenta una sola vez desde la primera fase en que se imprimió.
      */
     private AvancesPorFase avancesPorFase(
             Long centralId, Map<Long, Integer> totalesPorSindicato,
-            Map<Long, Integer> impresosActualesPorSindicato) {
+            Map<Long, Integer> impresosActualesPorSindicato,
+            Set<Long> productoresComputablesIds) {
         List<FaseImpresionCarnet> fases = faseRepository
                 .findByCentralIdOrderByNumeroAsc(centralId);
         if (fases.isEmpty()) return new AvancesPorFase(List.of(), Map.of());
@@ -149,7 +171,9 @@ public class InformeImpresionCentralService {
                     : participanteFaseRepository.findTodosDeFase(fase.getId())) {
                 if (participante.getImpresionesEnFase() < 1) continue;
                 Long productorId = participante.getProductor().getId();
+                if (!productoresComputablesIds.contains(productorId)) continue;
                 Long sindicatoId = participante.getProductor().getSindicato().getId();
+                if (!totalesPorSindicato.containsKey(sindicatoId)) continue;
                 impresosCentral.add(productorId);
                 impresosPorSindicato.computeIfAbsent(sindicatoId, id -> new HashSet<>())
                         .add(productorId);
@@ -180,9 +204,8 @@ public class InformeImpresionCentralService {
      * Una parcela vigente con sistema tiene prioridad; la clasificación
      * pendiente solo se usa mientras el productor todavía no tiene parcela.
      */
-    private Map<Long, EstadisticasProductores> estadisticasProductores(Long centralId) {
-        List<Productor> productores = productorRepository
-                .findBySindicatoCentralIdOrderByApellidosAscNombresAsc(centralId);
+    private Map<Long, EstadisticasProductores> estadisticasProductores(
+            List<Productor> productores) {
         if (productores.isEmpty()) return Map.of();
 
         List<Long> ids = productores.stream().map(Productor::getId).toList();

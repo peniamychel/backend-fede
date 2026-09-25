@@ -58,8 +58,8 @@ public class Veto extends EntidadAuditable {
     private Productor productor;
 
     /** La reunión que lo decidió. Su acta es el respaldo. */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "reunion_id", nullable = false,
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reunion_id",
             foreignKey = @ForeignKey(name = "fk_veto_reunion"))
     private Reunion reunion;
 

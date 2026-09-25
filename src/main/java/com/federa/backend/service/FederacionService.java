@@ -28,7 +28,9 @@ public class FederacionService {
     }
 
     public List<FederacionResponse> listar() {
+        var alcance = com.federa.backend.seguridad.AlcanceCentral.actual();
         return federacionRepository.findAll(Sort.by("nombre")).stream()
+                .filter(f -> alcance == null || alcance.federacionId().equals(f.getId()))
                 .map(FederacionResponse::desde)
                 .toList();
     }

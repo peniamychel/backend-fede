@@ -9,6 +9,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * Quien entra al sistema.
@@ -51,10 +53,51 @@ public class Usuario extends EntidadAuditable {
     @Column(name = "nombre_completo", length = 120)
     private String nombreCompleto;
 
+    /** Null para acceso general; de otro modo solo esta central. */
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "central_acceso_id")
+    private Central centralAcceso;
+
+    @Column(name = "todos_sindicatos", nullable = false, columnDefinition = "boolean default true")
+    @Builder.Default
+    private boolean todosSindicatos = true;
+
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(name = "usuarios_sindicatos_acceso",
+            joinColumns = @JoinColumn(name = "usuario_id"),
+            inverseJoinColumns = @JoinColumn(name = "sindicato_id"))
+    @Builder.Default
+    private Set<Sindicato> sindicatosAcceso = new LinkedHashSet<>();
+
+    @Column(name = "permisos_personalizados", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean permisosPersonalizados = false;
+
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(name = "usuarios_permisos_acceso",
+            joinColumns = @JoinColumn(name = "usuario_id"),
+            inverseJoinColumns = @JoinColumn(name = "permiso_id"))
+    @Builder.Default
+    private Set<Permiso> permisosAcceso = new LinkedHashSet<>();
+
     /** Rol único por ahora: ADMIN u OPERADOR. */
     @Column(nullable = false, length = 20)
     @Builder.Default
     private String rol = "OPERADOR";
+
+    @Column(name = "codigo_acceso_identificador", unique = true, length = 24)
+    private String codigoAccesoIdentificador;
+
+    @JsonIgnore
+    @Column(name = "codigo_acceso_hash", length = 100)
+    private String codigoAccesoHash;
+
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(name = "usuarios_roles_acceso",
+            joinColumns = @JoinColumn(name = "usuario_id"),
+            inverseJoinColumns = @JoinColumn(name = "rol_id"))
+    @Builder.Default
+    private Set<RolAcceso> rolesAcceso = new LinkedHashSet<>();
 
     // El usuario tenía su propio `activo` y su propio `creado_en`, con un
     // @PrePersist a mano. Los reemplaza EntidadAuditable: `estado` cumple lo

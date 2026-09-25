@@ -24,6 +24,12 @@ public record LoginResponse(
         String nombreCompleto,
 
         @Schema(description = "Rol: ADMIN u OPERADOR.", example = "ADMIN")
-        String rol
+        String rol,
+
+        java.util.List<String> roles,
+
+        java.util.List<String> permisos,
+        Long centralId,
+        String centralNombre
 ) {
 }

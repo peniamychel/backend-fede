@@ -32,6 +32,8 @@ import java.util.List;
 public class InformeRevisionPadronCentralPdf {
 
     private static final Color NEGRO = Color.BLACK;
+    // Espacio original más aproximadamente cinco renglones antes de las firmas.
+    private static final float ESPACIO_FIRMAS = 78;
     private static final Color GRIS = new Color(115, 115, 115);
     private static final Color FONDO_GRIS = new Color(235, 235, 235);
     private static final Font TITULO = fuente(14, Font.BOLD, NEGRO);
@@ -80,16 +82,36 @@ public class InformeRevisionPadronCentralPdf {
             throws DocumentException {
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
         Document documento = nuevoDocumento();
-        PdfWriter.getInstance(documento, salida);
+        PdfWriter escritor = PdfWriter.getInstance(documento, salida);
         documento.open();
         encabezado(documento, informe, seccion);
+        documento.add(leyendaObservaciones());
         documento.add(tabla(seccion));
+        PdfPTable bloqueFirmas = firmas(informe, seccion);
+        bloqueFirmas.setTotalWidth(documento.right() - documento.left());
+        if (escritor.getVerticalPosition(true) - documento.bottom()
+                < bloqueFirmas.getTotalHeight() + ESPACIO_FIRMAS) {
+            documento.newPage();
+            encabezado(documento, informe, seccion);
+        }
+        documento.add(bloqueFirmas);
         documento.close();
         return salida.toByteArray();
     }
 
     private Document nuevoDocumento() {
         return new Document(PageSize.LETTER, 30, 30, 28, 40);
+    }
+
+    private Paragraph leyendaObservaciones() {
+        Paragraph leyenda = new Paragraph(
+                "* N° lote = Falta el número de lote.\n"
+                        + "* Sie = Revisar nombre y apellidos frente a la cédula de identidad.\n"
+                        + "* Obs = Productor observado revisión general.\n"
+                        + "* Ci = Falta la cédula de identidad.", CELDA);
+        leyenda.setIndentationLeft(5);
+        leyenda.setSpacingAfter(6);
+        return leyenda;
     }
 
     private void encabezado(
@@ -114,10 +136,8 @@ public class InformeRevisionPadronCentralPdf {
         }
 
         int total = seccion == null ? informe.total() : seccion.productores().size();
-        int adicionales = cantidadFilasEnBlanco(total);
         Paragraph resumen = new Paragraph(
                 "Productores registrados: " + total
-                        + "   ·   Espacios para nuevos registros: " + adicionales
                         + "   ·   Generado: "
                         + LocalDateTime.now().format(
                         DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")), SUBTITULO);
@@ -126,13 +146,13 @@ public class InformeRevisionPadronCentralPdf {
         documento.add(resumen);
     }
 
-    private PdfPTable tabla(InformePreImpresionCentral.SeccionSindicato seccion)
+    PdfPTable tabla(InformePreImpresionCentral.SeccionSindicato seccion)
             throws DocumentException {
         String[] titulos = {"N°", "NOMBRES", "APELLIDOS", "C.I.", "N° LOTE",
                 "OBSERVACIONES"};
         PdfPTable tabla = new PdfPTable(titulos.length);
         tabla.setWidthPercentage(100);
-        tabla.setWidths(new float[]{.4f, 1.45f, 1.7f, .9f, .8f, 2.25f});
+        tabla.setWidths(new float[]{.4f, 1.6f, 1.85f, .9f, .8f, 1.95f});
 
         PdfPCell sindicato = new PdfPCell(new Phrase(
                 "SINDICATO: " + seccion.sindicato(), SECCION));
@@ -155,12 +175,10 @@ public class InformeRevisionPadronCentralPdf {
 
         int adicionales = cantidadFilasEnBlanco(seccion.productores().size());
         for (int i = 0; i < adicionales; i++) {
-            tabla.addCell(dato(numero++, Element.ALIGN_RIGHT));
-            for (int columna = 1; columna < titulos.length; columna++) {
-                PdfPCell vacia = dato("", Element.ALIGN_LEFT);
-                vacia.setMinimumHeight(19);
-                tabla.addCell(vacia);
-            }
+            PdfPCell vacia = dato("", Element.ALIGN_LEFT);
+            vacia.setColspan(titulos.length);
+            vacia.setMinimumHeight(24);
+            tabla.addCell(vacia);
         }
 
         if (seccion.productores().isEmpty()) {
@@ -172,13 +190,49 @@ public class InformeRevisionPadronCentralPdf {
         return tabla;
     }
 
-    private String observaciones(InformePreImpresionCentral.Fila fila) {
-        List<String> observaciones = new ArrayList<>(2);
-        if (fila.observado()) observaciones.add("NOMBRE OBSERVADO");
-        if (fila.lotes() == null || fila.lotes().isBlank()) {
-            observaciones.add("SIN NÚMERO DE LOTE");
+    private PdfPTable firmas(InformePreImpresionCentral informe,
+                            InformePreImpresionCentral.SeccionSindicato seccion) {
+        PdfPTable tabla = new PdfPTable(2);
+        tabla.setWidthPercentage(100);
+        tabla.setSpacingBefore(ESPACIO_FIRMAS);
+        tabla.setKeepTogether(true);
+        tabla.addCell(firmaManual("CENTRAL " + informe.central()));
+        tabla.addCell(firmaManual("SINDICATO " + seccion.sindicato()));
+        return tabla;
+    }
+
+    private PdfPCell firmaManual(String organizacion) {
+        PdfPCell bloque = new PdfPCell();
+        bloque.setBorder(Rectangle.NO_BORDER);
+        bloque.setPadding(12);
+        PdfPTable espacio = new PdfPTable(1);
+        espacio.setWidthPercentage(90);
+        PdfPCell linea = new PdfPCell(new Phrase(""));
+        linea.setFixedHeight(90);
+        linea.setBorder(Rectangle.BOTTOM);
+        linea.setBorderColor(NEGRO);
+        linea.setBorderWidth(.5f);
+        espacio.addCell(linea);
+        bloque.addElement(espacio);
+        for (String texto : List.of("Sello, firma y pie de firma", "SECRETARIO GENERAL", organizacion)) {
+            Paragraph etiqueta = new Paragraph(texto, texto.equals("SECRETARIO GENERAL") ? SECCION : CELDA);
+            etiqueta.setAlignment(Element.ALIGN_CENTER);
+            bloque.addElement(etiqueta);
         }
-        return String.join(" · ", observaciones);
+        return bloque;
+    }
+
+    private String observaciones(InformePreImpresionCentral.Fila fila) {
+        List<String> notas = new ArrayList<>(4);
+        boolean faltaCi = fila.ci() == null || fila.ci().isBlank();
+        boolean faltaLote = fila.lotes() == null || fila.lotes().isBlank();
+        boolean observacionSie = fila.datosFaltantes().stream()
+                .anyMatch("Revisión SIE pendiente"::equalsIgnoreCase);
+        if (faltaLote) notas.add("N° lote");
+        if (observacionSie) notas.add("Sie");
+        if (fila.observado()) notas.add("Obs");
+        if (faltaCi) notas.add("Ci");
+        return String.join(", ", notas);
     }
 
     private PdfPCell cabecera(String texto) {

@@ -13,6 +13,8 @@ public interface VetoRepository extends JpaRepository<Veto, Long> {
     /** El veto abierto de un productor, si tiene. */
     Optional<Veto> findByProductorIdAndVigenteIsTrue(Long productorId);
 
+    boolean existsByProductorCiAndVigenteIsTrue(String ci);
+
     /** Todo lo que le pasó a esa persona: los vetos abiertos y los levantados. */
     List<Veto> findByProductorIdOrderByDesdeDesc(Long productorId);
 
@@ -63,14 +65,15 @@ public interface VetoRepository extends JpaRepository<Veto, Long> {
               join s.central c
               join c.federacion f
             where (:vigentes = false or v.vigente = true)
+              and p.eliminadoEn is null
               and (:sindicatoId is null or s.id = :sindicatoId)
               and (:texto is null
                    or upper(p.nombres) like upper(concat('%', :texto, '%'))
                    or upper(p.apellidos) like upper(concat('%', :texto, '%'))
                    or p.ci like concat('%', :texto, '%')
-                   or upper(p.codigo) = upper(:texto)
+                   or upper(p.codigo) like upper(concat('%', :texto, '%'))
                    or upper(concat(f.numero, c.abreviatura, p.correlativo))
-                        = upper(:texto))
+                        like upper(concat('%', :texto, '%')))
             order by v.desde desc
             """)
     List<Veto> buscar(@Param("texto") String texto,

@@ -91,6 +91,7 @@ public class FaseImpresionCarnetService {
         } else if (anterior.isPresent()) {
             for (ProductorFaseImpresion pendiente : participanteRepository
                     .findByFaseIdAndPendienteTrue(anterior.get().getId())) {
+                if (pendiente.getProductor().getEliminadoEn() != null) continue;
                 if (pendiente.isReimpresion()
                         && !pendiente.getProductor().isReimpresionFasePendiente()) continue;
                 incluidos.put(pendiente.getProductor().getId(), new Incorporacion(

@@ -51,9 +51,9 @@ public interface ReunionRepository extends JpaRepository<Reunion, Long> {
                          and (upper(p.nombres) like upper(concat('%', :texto, '%'))
                               or upper(p.apellidos) like upper(concat('%', :texto, '%'))
                               or p.ci like concat('%', :texto, '%')
-                              or upper(p.codigo) = upper(:texto)
+                              or upper(p.codigo) like upper(concat('%', :texto, '%'))
                               or upper(concat(f.numero, c.abreviatura, p.correlativo))
-                                   = upper(:texto)
+                                   like upper(concat('%', :texto, '%'))
                               or upper(v.motivo) like upper(concat('%', :texto, '%')))))
             order by r.fecha desc, r.id desc
             """)
@@ -96,9 +96,9 @@ public interface ReunionRepository extends JpaRepository<Reunion, Long> {
                          and (upper(p.nombres) like upper(concat('%', :texto, '%'))
                               or upper(p.apellidos) like upper(concat('%', :texto, '%'))
                               or p.ci like concat('%', :texto, '%')
-                              or upper(p.codigo) = upper(:texto)
+                              or upper(p.codigo) like upper(concat('%', :texto, '%'))
                               or upper(concat(f.numero, c.abreviatura, p.correlativo))
-                                   = upper(:texto)
+                                   like upper(concat('%', :texto, '%'))
                               or upper(v.motivo) like upper(concat('%', :texto, '%')))))
             """)
     List<TipoReunion> tiposQueCoinciden(@Param("sindicatoId") Long sindicatoId,

@@ -69,6 +69,10 @@ public class TenenciaLote extends EntidadAuditable {
     @Column(length = 300)
     private String observaciones;
 
+    /** Letra elegida manualmente para esta tenencia; null deja el orden automático. */
+    @Column(name = "letra_reservada", length = 1)
+    private String letraReservada;
+
     public boolean estaVigente() {
         return hasta == null;
     }

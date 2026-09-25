@@ -71,13 +71,12 @@ public class SindicatoController {
     @GetMapping(value = "/{id}/informe.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     @Operation(summary = "Descarga la nómina del sindicato en PDF",
             description = """
-                    Reproduce la planilla que la federación venía imprimiendo desde Excel: \
-                    encabezado con la federación, la central y el sindicato, una fila por \
-                    productor ordenada por apellido, y el acta de entrega con los tres bloques \
-                    de firma al final.
+                    Presenta la nómina en carta vertical, con encabezado de la federación, \
+                    la central y el sindicato, una fila por productor ordenada por apellido, \
+                    y el acta de entrega con los tres bloques de firma al final.
 
-                    Los productores salen con su C.I., sus números de lote y su carnet de \
-                    productor. La columna de observaciones se imprime en blanco, para anotar \
+                    Los productores salen con su C.I. y sus números de lote. \
+                    La columna de observaciones se imprime en blanco, para anotar \
                     a mano sobre el papel.
 
                     Si el sindicato tiene Secretario General vigente con la firma cargada, se estampa \

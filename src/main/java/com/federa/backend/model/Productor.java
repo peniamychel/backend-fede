@@ -110,6 +110,10 @@ public class Productor extends EntidadAuditable {
     @Column(length = 20)
     private String ci;
 
+    /** Null mientras pertenece al padrón; con fecha, permanece recuperable en la papelera. */
+    @Column(name = "eliminado_en", columnDefinition = "datetime")
+    private LocalDateTime eliminadoEn;
+
     /**
      * Columna "Nombre x": nombre corregido propuesto durante la revisión del
      * padrón, cuando el de la columna "Nombres" no coincide con el documento.

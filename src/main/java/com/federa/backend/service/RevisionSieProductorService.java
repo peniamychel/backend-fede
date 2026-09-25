@@ -145,7 +145,8 @@ public class RevisionSieProductorService {
     }
 
     /**
-     * Da por válidos los datos actuales cuando SIE no encontró la cédula.
+     * Da por válidos los datos actuales cuando SIE no encontró la cédula o
+     * cuando el responsable decide conservarlos frente a una diferencia.
      * No borra una observación manual, porque esa marca puede corresponder a
      * una revisión administrativa diferente de la identidad consultada.
      */
@@ -153,15 +154,19 @@ public class RevisionSieProductorService {
     public RevisionSieProductorResponse aprobarDatosActuales(Long id) {
         Productor productor = productores.findByIdParaRevisionSie(id)
                 .orElseThrow(() -> new RecursoNoEncontradoException("productor", id));
-        if (productor.getRevisionSieEstado() != EstadoRevisionSieProductor.NO_ENCONTRADO) {
+        EstadoRevisionSieProductor estadoAnterior = productor.getRevisionSieEstado();
+        if (estadoAnterior != EstadoRevisionSieProductor.NO_ENCONTRADO
+                && estadoAnterior != EstadoRevisionSieProductor.DIFERENCIA_PENDIENTE) {
             throw new ReglaNegocioException(
-                    "Solo se pueden aprobar manualmente datos que SIE no encontró.");
+                    "Este productor no tiene una revisión SIE pendiente que pueda aprobarse manualmente.");
         }
         productor.setRevisionSiePendiente(false);
         productor.setRevisionSieEstado(EstadoRevisionSieProductor.APROBADO_MANUAL);
         productor.setRevisionSieMensaje(
-                "Los datos actuales fueron revisados y aprobados manualmente después de que "
-                        + "la cédula no fue encontrada en SIE.");
+                estadoAnterior == EstadoRevisionSieProductor.DIFERENCIA_PENDIENTE
+                        ? "Se revisó la diferencia con SIE y se aprobaron manualmente los datos existentes."
+                        : "Los datos actuales fueron revisados y aprobados manualmente después de que "
+                                + "la cédula no fue encontrada en SIE.");
         limpiarSugerencia(productor);
         return respuesta(APROBADA_MANUAL, true, false,
                 productor.getRevisionSieMensaje());

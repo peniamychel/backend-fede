@@ -33,7 +33,7 @@ public record LoteResponse(
         @Schema(description = "Subdivisión, ya normalizada.", example = "A")
         ExtensionLote extension,
 
-        @Schema(description = "Derivado: número y letra automática juntos, para mostrar.",
+        @Schema(description = "Derivado: número y letra vigente juntos, para mostrar.",
                 example = "74 A")
         String codigo,
 
@@ -87,6 +87,8 @@ public record LoteResponse(
             @Schema(example = "213J78") String codigoPadron,
             @Schema(description = "A-H cuando comparte número de lote.", example = "A")
             String letra,
+            @Schema(description = "Letra reservada manualmente; null si se asigna automáticamente.")
+            String letraReservada,
             @Schema(example = "2026-03-01") LocalDate desde) {
     }
 
@@ -136,6 +138,7 @@ public record LoteResponse(
                         tenencia.getProductor().getNombreCompleto(),
                         CodigoPadron.de(tenencia.getProductor()),
                         tenencia.getProductor().getLetraCodigo(),
+                        tenencia.getLetraReservada(),
                         tenencia.getDesde()),
                 sistema == null ? null : new SistemaEnLote(
                         sistema.getSistema().getId(),

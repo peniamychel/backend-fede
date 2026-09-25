@@ -11,6 +11,7 @@ import com.federa.backend.repository.ImagenCargoRepository;
 import com.federa.backend.repository.ImagenProductorRepository;
 import com.federa.backend.repository.ProductorRepository;
 import com.federa.backend.repository.TenenciaLoteRepository;
+import com.federa.backend.repository.VetoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -45,7 +46,10 @@ class RevisionSieEdicionManualTest {
         servicio = new ProductorService(repositorio,
                 mock(TenenciaLoteRepository.class), mock(ImagenProductorRepository.class),
                 mock(ImagenCargoRepository.class), sindicatos, mock(NumeradorPadron.class),
-                mock(AlmacenObjetos.class));
+                mock(AlmacenObjetos.class), mock(VetoRepository.class),
+                mock(com.federa.backend.repository.CargoRepository.class),
+                mock(com.federa.backend.repository.AsistenciaRepository.class),
+                mock(com.federa.backend.repository.DetalleGrupoImpresionCredencialRepository.class));
     }
 
     @Test

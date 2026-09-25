@@ -7,6 +7,7 @@ import com.federa.backend.dto.CredencialPrevia;
 import com.federa.backend.dto.EstadoRequest;
 import com.federa.backend.dto.ObservacionProductorRequest;
 import com.federa.backend.dto.ProductorDetalleResponse;
+import com.federa.backend.dto.ProductorPapeleraResponse;
 import com.federa.backend.dto.ProductorRequest;
 import com.federa.backend.dto.ProductorResponse;
 import com.federa.backend.dto.RevisionSieProductorResponse;
@@ -95,6 +96,26 @@ public class ProductorController {
         return productorService.porCedula(ci);
     }
 
+    @GetMapping("/papelera")
+    @Operation(summary = "Lista los productores retirados del padrón")
+    public List<ProductorPapeleraResponse> papelera() {
+        return productorService.listarPapelera();
+    }
+
+    @PostMapping("/papelera/{id}/restaurar")
+    @Operation(summary = "Restaura un productor si su cédula sigue libre")
+    public ProductorResponse restaurar(@PathVariable Long id) {
+        return productorService.restaurar(id);
+    }
+
+    @DeleteMapping("/papelera/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Elimina definitivamente un productor de la papelera",
+            description = "Borra ficha, fotos e historial asociado. No se puede deshacer.")
+    public void eliminarDefinitivamente(@PathVariable Long id) {
+        productorService.eliminarDefinitivamente(id);
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Ficha completa: datos del productor, sus lotes y sus imágenes")
     public ProductorDetalleResponse obtener(@PathVariable Long id) {
@@ -125,8 +146,9 @@ public class ProductorController {
     }
 
     @PostMapping("/{id}/revision-sie/aprobacion-manual")
-    @Operation(summary = "Aprueba manualmente los datos que SIE no pudo encontrar",
-            description = "Conserva la identidad actual y cierra únicamente el bloqueo SIE. "
+    @Operation(summary = "Aprueba manualmente los datos actuales del productor",
+            description = "Conserva la identidad actual cuando SIE no encontró la cédula o "
+                    + "propuso una identidad diferente, y cierra únicamente el bloqueo SIE. "
                     + "Las observaciones manuales independientes no se eliminan.")
     public RevisionSieProductorResponse aprobarDatosActuales(@PathVariable Long id) {
         return revisionSieService.aprobarDatosActuales(id);
@@ -256,9 +278,9 @@ public class ProductorController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Elimina un productor",
-            description = "Arrastra en cascada sus imágenes y sus períodos de tenencia. Sus "
-                    + "lotes no: la tierra pertenece al sindicato y se queda ahí.")
+    @Operation(summary = "Mueve un productor a la papelera",
+            description = "Conserva la ficha, fotos e historial, pero lo quita del padrón "
+                    + "y bloquea su carnet. No acepta parcelas, vetos ni cargos vigentes.")
     public void eliminar(@PathVariable Long id) {
         productorService.eliminar(id);
     }

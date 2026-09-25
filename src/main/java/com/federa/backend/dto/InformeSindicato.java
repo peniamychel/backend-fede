@@ -32,16 +32,13 @@ public record InformeSindicato(
      *
      * @param numero       correlativo dentro del sindicato, arrancando en 1.
      * @param lotes        números de lote unidos por coma, "" si no tiene.
-     * @param codigoPadron el código con el que se lo nombra, "" si todavía no
-     *                     se puede armar.
      */
     public record Fila(
             int numero,
             String nombres,
             String apellidos,
             String ci,
-            String lotes,
-            String codigoPadron) {
+            String lotes) {
     }
 
     /**
